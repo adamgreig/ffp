@@ -1,0 +1,541 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<export version="D">
+  <design>
+    <source>/home/adam/Projects/ffp/hardware/ffp/ffp.sch</source>
+    <date>Tue 30 Apr 2019 01:44:52 BST</date>
+    <tool>Eeschema 5.1.2-f72e74a~84~ubuntu18.04.1</tool>
+    <sheet number="1" name="/" tstamps="/">
+      <title_block>
+        <title>FFP FPGA/Flash Programmer</title>
+        <company/>
+        <rev>1</rev>
+        <date>2019-04-30</date>
+        <source>ffp.sch</source>
+        <comment number="1" value="Drawn By: Adam Greig"/>
+        <comment number="2" value=""/>
+        <comment number="3" value=""/>
+        <comment number="4" value=""/>
+      </title_block>
+    </sheet>
+  </design>
+  <components>
+    <comp ref="IC1">
+      <value>STM32F042K6T7</value>
+      <footprint>agg:LQFP-32</footprint>
+      <datasheet>http://www.st.com/web/en/resource/technical/document/datasheet/DM00088500.pdf</datasheet>
+      <fields>
+        <field name="Farnell">2469553</field>
+      </fields>
+      <libsource lib="agg" part="STM32F0xxKxTx" description="STM32F0 32 pin LQFP package"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CC77413</tstamp>
+    </comp>
+    <comp ref="J2">
+      <value>USB4085</value>
+      <footprint>agg:USB4085</footprint>
+      <datasheet>https://gct.co/connector/usb4085</datasheet>
+      <fields>
+        <field name="Farnell">2924867</field>
+      </fields>
+      <libsource lib="agg" part="USB4085" description="Type C USB 2.0 Connector"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CC791DB</tstamp>
+    </comp>
+    <comp ref="P1">
+      <value>SWD_TC</value>
+      <footprint>agg:TC2030-NL</footprint>
+      <libsource lib="agg" part="SWD_TC" description="SWD TagConnect"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CC8444D</tstamp>
+    </comp>
+    <comp ref="R1">
+      <value>10k</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">2447230</field>
+      </fields>
+      <libsource lib="agg" part="R" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CC8FE22</tstamp>
+    </comp>
+    <comp ref="C1">
+      <value>100n</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">1759122</field>
+      </fields>
+      <libsource lib="agg" part="C" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CCAFD35</tstamp>
+    </comp>
+    <comp ref="C2">
+      <value>100n</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">1759122</field>
+      </fields>
+      <libsource lib="agg" part="C" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CCB2FFC</tstamp>
+    </comp>
+    <comp ref="C3">
+      <value>100n</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">1759122</field>
+      </fields>
+      <libsource lib="agg" part="C" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CCB967B</tstamp>
+    </comp>
+    <comp ref="IC2">
+      <value>MCP1700</value>
+      <footprint>agg:SOT-23</footprint>
+      <fields>
+        <field name="Farnell">1296592</field>
+      </fields>
+      <libsource lib="agg" part="MCP1700" description="LDO Voltage Regulator"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CCEF97B</tstamp>
+    </comp>
+    <comp ref="C5">
+      <value>1µ</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">2768389</field>
+      </fields>
+      <libsource lib="agg" part="C" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CCF996A</tstamp>
+    </comp>
+    <comp ref="C6">
+      <value>1µ</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">2768389</field>
+      </fields>
+      <libsource lib="agg" part="C" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CD02190</tstamp>
+    </comp>
+    <comp ref="C7">
+      <value>100n</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">1759122</field>
+      </fields>
+      <libsource lib="agg" part="C" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CD25E8F</tstamp>
+    </comp>
+    <comp ref="C4">
+      <value>100n</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">1759122</field>
+      </fields>
+      <libsource lib="agg" part="C" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CD1C7DE</tstamp>
+    </comp>
+    <comp ref="IC3">
+      <value>MIC2004-0_5YM5</value>
+      <footprint>agg:SOT-23-5</footprint>
+      <datasheet>http://ww1.microchip.com/downloads/en/DeviceDoc/mic20xx.pdf</datasheet>
+      <fields>
+        <field name="Farnell">2509877</field>
+      </fields>
+      <libsource lib="agg" part="MIC2004-0_5YM5" description="500mA current limiting power switch in SOT23-5"/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CD0E2B8</tstamp>
+    </comp>
+    <comp ref="J3">
+      <value>PROG</value>
+      <footprint>agg:FTSH-105-01-L-DV-K</footprint>
+      <fields>
+        <field name="Farnell">2856437</field>
+      </fields>
+      <libsource lib="agg" part="CONN_02x05" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CC7A220</tstamp>
+    </comp>
+    <comp ref="R2">
+      <value>10k</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">2447230</field>
+      </fields>
+      <libsource lib="agg" part="R" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CD83BD5</tstamp>
+    </comp>
+    <comp ref="D1">
+      <value>LED</value>
+      <footprint>agg:0603-LED</footprint>
+      <fields>
+        <field name="Farnell">2610409</field>
+      </fields>
+      <libsource lib="agg" part="LED" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CDD9CF8</tstamp>
+    </comp>
+    <comp ref="R3">
+      <value>10k</value>
+      <footprint>agg:0603</footprint>
+      <fields>
+        <field name="Farnell">2447230</field>
+      </fields>
+      <libsource lib="agg" part="R" description=""/>
+      <sheetpath names="/" tstamps="/"/>
+      <tstamp>5CDDBDB5</tstamp>
+    </comp>
+  </components>
+  <libparts>
+    <libpart lib="agg" part="C">
+      <fields>
+        <field name="Reference">C</field>
+        <field name="Value">C</field>
+      </fields>
+      <pins>
+        <pin num="1" name="~" type="passive"/>
+        <pin num="2" name="~" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="agg" part="CONN_02x05">
+      <fields>
+        <field name="Reference">J</field>
+        <field name="Value">CONN_02x05</field>
+      </fields>
+      <pins>
+        <pin num="1" name="1" type="passive"/>
+        <pin num="2" name="2" type="passive"/>
+        <pin num="3" name="3" type="passive"/>
+        <pin num="4" name="4" type="passive"/>
+        <pin num="5" name="5" type="passive"/>
+        <pin num="6" name="6" type="passive"/>
+        <pin num="7" name="7" type="passive"/>
+        <pin num="8" name="8" type="passive"/>
+        <pin num="9" name="9" type="passive"/>
+        <pin num="10" name="10" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="agg" part="LED">
+      <fields>
+        <field name="Reference">D</field>
+        <field name="Value">LED</field>
+      </fields>
+      <pins>
+        <pin num="1" name="~" type="passive"/>
+        <pin num="2" name="~" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="agg" part="MCP1700">
+      <description>LDO Voltage Regulator</description>
+      <fields>
+        <field name="Reference">IC</field>
+        <field name="Value">MCP1700</field>
+        <field name="Footprint">agg:SOT-23</field>
+        <field name="Datasheet">http://www.farnell.com/datasheets/1784514.pdf</field>
+        <field name="Farnell">1296592</field>
+      </fields>
+      <pins>
+        <pin num="1" name="GND" type="power_in"/>
+        <pin num="2" name="VOUT" type="power_out"/>
+        <pin num="3" name="VIN" type="power_in"/>
+      </pins>
+    </libpart>
+    <libpart lib="agg" part="MIC2004-0_5YM5">
+      <description>500mA current limiting power switch in SOT23-5</description>
+      <docs>http://ww1.microchip.com/downloads/en/DeviceDoc/mic20xx.pdf</docs>
+      <fields>
+        <field name="Reference">IC</field>
+        <field name="Value">MIC2004-0_5YM5</field>
+        <field name="Footprint">agg:SOT-23-5</field>
+        <field name="Datasheet">http://ww1.microchip.com/downloads/en/DeviceDoc/mic20xx.pdf</field>
+        <field name="Farnell">2509877</field>
+      </fields>
+      <pins>
+        <pin num="1" name="VIN" type="power_in"/>
+        <pin num="2" name="GND" type="power_in"/>
+        <pin num="3" name="EN" type="input"/>
+        <pin num="4" name="NC" type="NotConnected"/>
+        <pin num="5" name="VOUT" type="power_out"/>
+      </pins>
+    </libpart>
+    <libpart lib="agg" part="R">
+      <fields>
+        <field name="Reference">R</field>
+        <field name="Value">R</field>
+      </fields>
+      <pins>
+        <pin num="1" name="~" type="passive"/>
+        <pin num="2" name="~" type="passive"/>
+      </pins>
+    </libpart>
+    <libpart lib="agg" part="STM32F0xxKxTx">
+      <description>STM32F0 32 pin LQFP package</description>
+      <docs>http://www.st.com/web/en/resource/technical/document/datasheet/DM00088500.pdf</docs>
+      <fields>
+        <field name="Reference">IC</field>
+        <field name="Value">STM32F0xxKxTx</field>
+        <field name="Footprint">agg:LQFP-32</field>
+        <field name="Datasheet">http://www.st.com/web/en/resource/technical/document/datasheet/DM00088500.pdf</field>
+        <field name="Farnell">2432085</field>
+      </fields>
+      <pins>
+        <pin num="1" name="VDD" type="power_in"/>
+        <pin num="2" name="PF0" type="BiDi"/>
+        <pin num="3" name="PF1" type="BiDi"/>
+        <pin num="4" name="NRST" type="input"/>
+        <pin num="5" name="VDDA" type="power_in"/>
+        <pin num="6" name="PA0" type="BiDi"/>
+        <pin num="7" name="PA1" type="BiDi"/>
+        <pin num="8" name="PA2" type="BiDi"/>
+        <pin num="9" name="PA3" type="BiDi"/>
+        <pin num="10" name="PA4" type="BiDi"/>
+        <pin num="11" name="PA5" type="BiDi"/>
+        <pin num="12" name="PA6" type="BiDi"/>
+        <pin num="13" name="PA7" type="BiDi"/>
+        <pin num="14" name="PB0" type="BiDi"/>
+        <pin num="15" name="PB1" type="BiDi"/>
+        <pin num="16" name="VSS" type="power_in"/>
+        <pin num="17" name="VDD" type="power_in"/>
+        <pin num="18" name="PA8" type="BiDi"/>
+        <pin num="19" name="PA9" type="BiDi"/>
+        <pin num="20" name="PA10" type="BiDi"/>
+        <pin num="21" name="PA11" type="BiDi"/>
+        <pin num="22" name="PA12" type="BiDi"/>
+        <pin num="23" name="PA13" type="BiDi"/>
+        <pin num="24" name="PA14" type="BiDi"/>
+        <pin num="25" name="PA15" type="BiDi"/>
+        <pin num="26" name="PB3" type="BiDi"/>
+        <pin num="27" name="PB4" type="BiDi"/>
+        <pin num="28" name="PB5" type="BiDi"/>
+        <pin num="29" name="PB6" type="BiDi"/>
+        <pin num="30" name="PB7" type="BiDi"/>
+        <pin num="31" name="BOOT0" type="input"/>
+        <pin num="32" name="VSS" type="power_in"/>
+      </pins>
+    </libpart>
+    <libpart lib="agg" part="SWD_TC">
+      <description>SWD TagConnect</description>
+      <fields>
+        <field name="Reference">P</field>
+        <field name="Value">SWD_TC</field>
+        <field name="Footprint">agg:TC2030-NL</field>
+      </fields>
+      <pins>
+        <pin num="1" name="VDD" type="power_in"/>
+        <pin num="2" name="SWDIO" type="BiDi"/>
+        <pin num="3" name="~RST" type="openCol"/>
+        <pin num="4" name="SWDCLK" type="output"/>
+        <pin num="5" name="GND" type="power_in"/>
+        <pin num="6" name="SWO" type="input"/>
+      </pins>
+    </libpart>
+    <libpart lib="agg" part="USB4085">
+      <description>Type C USB 2.0 Connector</description>
+      <docs>https://gct.co/connector/usb4085</docs>
+      <fields>
+        <field name="Reference">J</field>
+        <field name="Value">USB4085</field>
+        <field name="Footprint">agg:USB4085</field>
+        <field name="Datasheet">https://gct.co/connector/usb4085</field>
+        <field name="Farnell">2924867</field>
+      </fields>
+      <pins>
+        <pin num="A1" name="GND" type="passive"/>
+        <pin num="A4" name="VBUS" type="passive"/>
+        <pin num="A5" name="CC1" type="passive"/>
+        <pin num="A6" name="D+" type="passive"/>
+        <pin num="A7" name="D-" type="passive"/>
+        <pin num="A8" name="SBU1" type="passive"/>
+        <pin num="A9" name="VBUS" type="passive"/>
+        <pin num="A12" name="GND" type="passive"/>
+        <pin num="B1" name="GND" type="passive"/>
+        <pin num="B4" name="VBUS" type="passive"/>
+        <pin num="B5" name="CC1" type="passive"/>
+        <pin num="B6" name="D+" type="passive"/>
+        <pin num="B7" name="D-" type="passive"/>
+        <pin num="B8" name="SBU1" type="passive"/>
+        <pin num="B9" name="VBUS" type="passive"/>
+        <pin num="B12" name="GND" type="passive"/>
+      </pins>
+    </libpart>
+  </libparts>
+  <libraries>
+    <library logical="agg">
+      <uri>/home/adam/Projects/ffp/hardware/ffp/../agg-kicad/agg-kicad.lib</uri>
+    </library>
+  </libraries>
+  <nets>
+    <net code="1" name="GND">
+      <node ref="IC1" pin="16"/>
+      <node ref="J2" pin="A12"/>
+      <node ref="J2" pin="B1"/>
+      <node ref="J2" pin="A1"/>
+      <node ref="C3" pin="2"/>
+      <node ref="IC2" pin="1"/>
+      <node ref="IC1" pin="32"/>
+      <node ref="C2" pin="2"/>
+      <node ref="D1" pin="1"/>
+      <node ref="IC3" pin="2"/>
+      <node ref="J3" pin="3"/>
+      <node ref="J3" pin="9"/>
+      <node ref="J3" pin="5"/>
+      <node ref="J2" pin="B12"/>
+      <node ref="P1" pin="5"/>
+      <node ref="C1" pin="2"/>
+      <node ref="C4" pin="2"/>
+      <node ref="C5" pin="2"/>
+      <node ref="C6" pin="2"/>
+      <node ref="R1" pin="2"/>
+      <node ref="C7" pin="2"/>
+    </net>
+    <net code="2" name="3v3">
+      <node ref="IC1" pin="17"/>
+      <node ref="C1" pin="1"/>
+      <node ref="C3" pin="1"/>
+      <node ref="IC1" pin="1"/>
+      <node ref="IC1" pin="5"/>
+      <node ref="C2" pin="1"/>
+      <node ref="P1" pin="1"/>
+      <node ref="IC3" pin="1"/>
+      <node ref="IC2" pin="2"/>
+      <node ref="C4" pin="1"/>
+      <node ref="C6" pin="1"/>
+    </net>
+    <net code="3" name="5v">
+      <node ref="IC2" pin="3"/>
+      <node ref="C5" pin="1"/>
+      <node ref="J2" pin="B9"/>
+      <node ref="J2" pin="A9"/>
+      <node ref="J2" pin="B4"/>
+      <node ref="J2" pin="A4"/>
+    </net>
+    <net code="4" name="/USB_DP">
+      <node ref="IC1" pin="22"/>
+      <node ref="J2" pin="A6"/>
+      <node ref="J2" pin="B6"/>
+    </net>
+    <net code="5" name="Net-(J2-PadB5)">
+      <node ref="J2" pin="B5"/>
+    </net>
+    <net code="6" name="Net-(J2-PadA5)">
+      <node ref="J2" pin="A5"/>
+    </net>
+    <net code="7" name="/USB_DM">
+      <node ref="IC1" pin="21"/>
+      <node ref="J2" pin="A7"/>
+      <node ref="J2" pin="B7"/>
+    </net>
+    <net code="8" name="Net-(J2-PadA8)">
+      <node ref="J2" pin="A8"/>
+    </net>
+    <net code="9" name="Net-(J2-PadB8)">
+      <node ref="J2" pin="B8"/>
+    </net>
+    <net code="10" name="Net-(IC1-Pad29)">
+      <node ref="R2" pin="2"/>
+      <node ref="IC1" pin="29"/>
+    </net>
+    <net code="11" name="/TGT_3v3">
+      <node ref="R2" pin="1"/>
+      <node ref="C7" pin="1"/>
+      <node ref="IC3" pin="5"/>
+      <node ref="J3" pin="1"/>
+    </net>
+    <net code="12" name="Net-(IC1-Pad20)">
+      <node ref="IC1" pin="20"/>
+    </net>
+    <net code="13" name="Net-(IC1-Pad19)">
+      <node ref="IC1" pin="19"/>
+    </net>
+    <net code="14" name="Net-(IC1-Pad18)">
+      <node ref="IC1" pin="18"/>
+    </net>
+    <net code="15" name="Net-(IC1-Pad7)">
+      <node ref="IC1" pin="7"/>
+    </net>
+    <net code="16" name="Net-(IC1-Pad6)">
+      <node ref="IC1" pin="6"/>
+    </net>
+    <net code="17" name="/TPWR_EN">
+      <node ref="IC1" pin="30"/>
+      <node ref="IC3" pin="3"/>
+    </net>
+    <net code="18" name="Net-(D1-Pad2)">
+      <node ref="D1" pin="2"/>
+      <node ref="R3" pin="1"/>
+    </net>
+    <net code="19" name="Net-(IC1-Pad8)">
+      <node ref="R3" pin="2"/>
+      <node ref="IC1" pin="8"/>
+    </net>
+    <net code="20" name="/FLASH_~CS">
+      <node ref="IC1" pin="9"/>
+      <node ref="J3" pin="6"/>
+    </net>
+    <net code="21" name="/FPGA_~RST">
+      <node ref="J3" pin="8"/>
+      <node ref="IC1" pin="10"/>
+    </net>
+    <net code="22" name="Net-(IC1-Pad14)">
+      <node ref="IC1" pin="14"/>
+    </net>
+    <net code="23" name="Net-(IC1-Pad15)">
+      <node ref="IC1" pin="15"/>
+    </net>
+    <net code="24" name="Net-(IC1-Pad26)">
+      <node ref="IC1" pin="26"/>
+    </net>
+    <net code="25" name="/FLASH_SI">
+      <node ref="J3" pin="2"/>
+      <node ref="IC1" pin="27"/>
+      <node ref="IC1" pin="13"/>
+    </net>
+    <net code="26" name="Net-(J3-Pad7)">
+      <node ref="J3" pin="7"/>
+    </net>
+    <net code="27" name="/SCK">
+      <node ref="IC1" pin="11"/>
+      <node ref="J3" pin="4"/>
+    </net>
+    <net code="28" name="/FLASH_SO">
+      <node ref="J3" pin="10"/>
+      <node ref="IC1" pin="28"/>
+      <node ref="IC1" pin="12"/>
+    </net>
+    <net code="29" name="Net-(IC3-Pad4)">
+      <node ref="IC3" pin="4"/>
+    </net>
+    <net code="30" name="Net-(P1-Pad6)">
+      <node ref="P1" pin="6"/>
+    </net>
+    <net code="31" name="/~RST">
+      <node ref="IC1" pin="4"/>
+      <node ref="P1" pin="3"/>
+    </net>
+    <net code="32" name="Net-(IC1-Pad3)">
+      <node ref="IC1" pin="3"/>
+    </net>
+    <net code="33" name="Net-(IC1-Pad2)">
+      <node ref="IC1" pin="2"/>
+    </net>
+    <net code="34" name="Net-(IC1-Pad23)">
+      <node ref="IC1" pin="23"/>
+      <node ref="P1" pin="2"/>
+    </net>
+    <net code="35" name="Net-(IC1-Pad25)">
+      <node ref="IC1" pin="25"/>
+    </net>
+    <net code="36" name="Net-(IC1-Pad24)">
+      <node ref="IC1" pin="24"/>
+      <node ref="P1" pin="4"/>
+    </net>
+    <net code="37" name="Net-(IC1-Pad31)">
+      <node ref="R1" pin="1"/>
+      <node ref="IC1" pin="31"/>
+    </net>
+  </nets>
+</export>

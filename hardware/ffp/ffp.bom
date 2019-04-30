@@ -1,0 +1,45 @@
+Bill Of Materials
+=================
+
+Source file: ffp.xml
+Date: 2019-04-30T01:44:52.411393
+
+Parts Missing Footprints
+------------------------
+
+
+Parts Missing Order Codes
+-------------------------
+P1     SWD_TC          agg:TC2030-NL
+
+Inconsistent Order Codes
+------------------------
+
+
+Vendor Specific BOMs
+--------------------
+  Farnell
+  ~~~~~~~
+2469553,1,1x STM32F042K6T7 LQFP-32
+2924867,1,1x USB4085 USB4085
+2447230,3,3x 10k 0603
+1759122,5,5x 100n 0603
+1296592,1,1x MCP1700 SOT-23
+2768389,2,2x 1µ 0603
+2509877,1,1x MIC2004-0_5YM5 SOT-23-5
+2856437,1,1x PROG FTSH-105-01-L-DV-K
+2610409,1,1x LED 0603-LED
+
+
+Assembly BOM
+------------
+2469553              1   STM32F042K6T7   LQFP-32         IC1
+2924867              1   USB4085         USB4085         J2
+2447230              3   10k             0603            R1 R2 R3
+1759122              5   100n            0603            C1 C2 C3 C4 C7
+1296592              1   MCP1700         SOT-23          IC2
+2768389              2   1µ              0603            C5 C6
+2509877              1   MIC2004-0_5YM5  SOT-23-5        IC3
+2856437              1   PROG            FTSH-105-01-L-DV-K J3
+2610409              1   LED             0603-LED        D1
+

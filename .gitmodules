@@ -1,0 +1,3 @@
+[submodule "hardware/agg-kicad"]
+	path = hardware/agg-kicad
+	url = https://github.com/adamgreig/agg-kicad.git
