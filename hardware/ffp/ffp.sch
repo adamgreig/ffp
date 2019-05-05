@@ -15,18 +15,6 @@ Comment3 ""
 Comment4 ""
 $EndDescr
 $Comp
-L agg:STM32F0xxKxTx IC1
-U 1 1 5CC77413
-P 3200 4150
-F 0 "IC1" H 3200 5375 50  0000 C CNN
-F 1 "STM32F042K6T7" H 3200 5284 50  0000 C CNN
-F 2 "agg:LQFP-32" H 2900 2950 50  0001 L CNN
-F 3 "http://www.st.com/web/en/resource/technical/document/datasheet/DM00088500.pdf" H 2900 2850 50  0001 L CNN
-F 4 "2469553" H 2900 2750 50  0001 L CNN "Farnell"
-	1    3200 4150
-	1    0    0    -1  
-$EndComp
-$Comp
 L agg:USB4085 J2
 U 1 1 5CC791DB
 P 1900 1600
@@ -897,4 +885,16 @@ Text Notes 1000 6150 0    50   ~ 0
 STM32
 Wire Wire Line
 	3600 3350 4300 3350
+$Comp
+L agg:STM32F0xxKxTx IC1
+U 1 1 5CC77413
+P 3200 4150
+F 0 "IC1" H 3200 5375 50  0000 C CNN
+F 1 "STM32F042K6T7" H 3200 5284 50  0000 C CNN
+F 2 "agg:LQFP-32" H 2900 2950 50  0001 L CNN
+F 3 "https://www.st.com/resource/en/datasheet/stm32f042k6.pdf" H 2900 2850 50  0001 L CNN
+F 4 "2469553" H 2900 2750 50  0001 L CNN "Farnell"
+	1    3200 4150
+	1    0    0    -1  
+$EndComp
 $EndSCHEMATC
