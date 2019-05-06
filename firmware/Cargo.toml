@@ -1,0 +1,17 @@
+[package]
+name = "ffp"
+version = "0.1.0"
+authors = ["Adam Greig <adam@adamgreig.com>"]
+edition = "2018"
+
+[dependencies]
+cortex-m = "0.6.0"
+cortex-m-rt = "0.6.8"
+panic-halt = "0.2.0"
+stm32ral = { version = "0.2.0", features = ["stm32f0x2", "rt"] }
+
+[profile.release]
+codegen-units = 1
+incremental = false
+debug = true
+lto = true
