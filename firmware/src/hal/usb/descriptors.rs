@@ -27,24 +27,28 @@ pub static STRING_DESCRIPTORS: [StringDescriptor; 4] = [
     StringDescriptor {
         bLength: 4,
         bDescriptorType: DescriptorType::String as u8,
+        // en_US only
         bString: [0x09, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
     },
     StringDescriptor {
         bLength: 8,
         bDescriptorType: DescriptorType::String as u8,
+        // "AGG"
         bString: [0x41, 0x00, 0x47, 0x00, 0x47, 0x00, 0x00, 0x00,
                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
     },
     StringDescriptor {
         bLength: 14,
         bDescriptorType: DescriptorType::String as u8,
+        // "FFP r1"
         bString: [0x46, 0x00, 0x46, 0x00, 0x50, 0x00, 0x20, 0x00,
                   0x72, 0x00, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00],
     },
     StringDescriptor {
         bLength: 8,
         bDescriptorType: DescriptorType::String as u8,
+        // "001"
         bString: [0x30, 0x00, 0x30, 0x00, 0x31, 0x00, 0x00, 0x00,
                   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
     },
@@ -54,7 +58,7 @@ pub static CONFIGURATION_DESCRIPTOR: ConfigurationDescriptor = ConfigurationDesc
     bLength: size_of::<ConfigurationDescriptor>() as u8,
     bDescriptorType: DescriptorType::Configuration as u8,
     wTotalLength: (size_of::<ConfigurationDescriptor>() + size_of::<InterfaceDescriptor>() +
-                   size_of::<EndpointDescriptor>() * 2) as u16,
+                   size_of::<EndpointDescriptor>() * NUM_ENDPOINTS) as u16,
     bNumInterfaces: 1,
     bConfigurationValue: 1,
     iConfiguration: 0,
@@ -74,7 +78,9 @@ pub static INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor {
     iInterface: 0,
 };
 
-pub static ENDPOINT_DESCRIPTORS: [EndpointDescriptor; 2] = [
+const NUM_ENDPOINTS: usize = 2;
+pub static ENDPOINT_DESCRIPTORS: [EndpointDescriptor; NUM_ENDPOINTS] = [
+    // EP1 IN, BULK
     EndpointDescriptor {
         bLength: size_of::<EndpointDescriptor>() as u8,
         bDescriptorType: DescriptorType::Endpoint as u8,
@@ -83,6 +89,8 @@ pub static ENDPOINT_DESCRIPTORS: [EndpointDescriptor; 2] = [
         wMaxPacketSize: 64,
         bInterval: 10,
     },
+
+    // EP1 OUT, BULK
     EndpointDescriptor {
         bLength: size_of::<EndpointDescriptor>() as u8,
         bDescriptorType: DescriptorType::Endpoint as u8,

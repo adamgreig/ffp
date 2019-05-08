@@ -11,6 +11,7 @@ use descriptors::*;
 
 use super::gpio;
 
+/// Store persistent state for USB stack
 struct State {
     pending_address: Option<u16>,
 }
@@ -23,6 +24,7 @@ impl State {
 
 static mut STATE: State = State::new();
 
+/// USB stack interface
 pub struct USB {
     usb: usb::Instance,
 }
@@ -74,35 +76,37 @@ impl USB {
         match ep_id {
             // Handle events on control EP0
             0 => {
-                let (ctr_tx, ctr_rx) = read_reg!(usb, self.usb, EP0R, CTR_TX, CTR_RX);
+                let (ctr_tx, ctr_rx, ep_type, ea) =
+                    read_reg!(usb, self.usb, EP0R, CTR_TX, CTR_RX, EP_TYPE, EA);
                 if ctr_tx == 1 {
                     self.process_control_tx();
                     // Clear CTR_TX
                     write_reg!(usb, self.usb, EP0R,
-                               CTR_RX: 1, EP_TYPE: Control, CTR_TX: 0, EA: 0);
+                               CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 0, EA: ea);
                 }
                 if ctr_rx == 1 {
                     self.process_control_rx();
                     // Clear CTR_RX
                     write_reg!(usb, self.usb, EP0R,
-                               CTR_RX: 0, EP_TYPE: Control, CTR_TX: 1, EA: 0);
+                               CTR_RX: 0, EP_TYPE: ep_type, CTR_TX: 1, EA: ea);
                 }
             },
 
             // Handle events on data EP1
             1 => {
-                let (ctr_tx, ctr_rx) = read_reg!(usb, self.usb, EP0R, CTR_TX, CTR_RX);
+                let (ctr_tx, ctr_rx, ep_type, ea) =
+                    read_reg!(usb, self.usb, EP1R, CTR_TX, CTR_RX, EP_TYPE, EA);
                 if ctr_tx == 1 {
                     self.process_data_tx();
                     // Clear CTR_TX
                     write_reg!(usb, self.usb, EP1R,
-                               CTR_RX: 1, EP_TYPE: Bulk, CTR_TX: 0, EA: 1);
+                               CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 0, EA: ea);
                 }
                 if ctr_rx == 1 {
                     self.process_data_rx();
                     // Clear CTR_RX
                     write_reg!(usb, self.usb, EP1R,
-                               CTR_RX: 0, EP_TYPE: Bulk, CTR_TX: 1, EA: 1);
+                               CTR_RX: 0, EP_TYPE: ep_type, CTR_TX: 1, EA: ea);
                 }
             },
 
@@ -113,6 +117,8 @@ impl USB {
 
     /// Process transmission complete on EP0
     fn process_control_tx(&self) {
+        // If we had a pending address change, we must have just sent the STATUS ACK,
+        // so apply the new address now and clear the pending change.
         match unsafe { STATE.pending_address } {
             Some(addr) => {
                 self.set_address(addr);
@@ -128,14 +134,40 @@ impl USB {
         if read_reg!(usb, self.usb, EP0R, SETUP) == 1 {
             self.process_setup_rx();
         }
+        // Resume reception on EP0
         self.control_rx_ack();
     }
 
+    /// Resume reception of new packets
     fn control_rx_ack(&self) {
-        // Indicate we're ready to receive again
+        // Indicate we're ready to receive again by setting STAT_RX to VALID
         let stat_rx = read_reg!(usb, self.usb, EP0R, STAT_RX);
         write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
                    STAT_RX: Self::stat_valid(stat_rx));
+    }
+
+    /// Indicate a packet has been loaded into the buffer and is ready for transmission
+    fn control_tx_valid(&self) {
+        let stat_tx = read_reg!(usb, self.usb, EP0R, STAT_TX);
+        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
+                   STAT_TX: Self::stat_valid(stat_tx));
+    }
+
+    /// Set the control endpoint to STALL in both directions
+    ///
+    /// This indicates an error processing the request to the host,
+    /// and will be reset by hardware to NAK on both directions upon
+    /// the next SETUP reception.
+    fn control_stall(&self) {
+        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP0R, STAT_TX, STAT_RX);
+        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
+                   STAT_TX: Self::stat_stall(stat_tx), STAT_RX: Self::stat_stall(stat_rx));
+    }
+
+    /// Send a 0-length ACK STATUS response to the next IN transfer
+    fn control_tx_ack(&self) {
+        unsafe { BTABLE[0].tx_count(0) };
+        self.control_tx_valid();
     }
 
     /// Process receiving a SETUP packet
@@ -151,19 +183,27 @@ impl USB {
                         setup.wLength, descriptor_type as u8, descriptor_index as u8);
                 },
                 Some(StandardRequest::GetStatus) => {
-                    self.tx_status_ack();
+                    // Reply with dummy status 0x0000
+                    let data = [0u8, 0u8];
+                    unsafe {
+                        EP0BUF.write_tx(&data[..]);
+                        BTABLE[0].tx_count(data.len());
+                    }
+                    self.control_tx_valid();
                 },
                 Some(StandardRequest::SetAddress) => {
+                    // Store new address for application after sending STATUS back
                     unsafe { STATE.pending_address = Some(setup.wValue) };
-                    self.tx_status_ack();
+                    self.control_tx_ack();
                 },
                 Some(StandardRequest::SetConfiguration) => {
+                    // Apply requested configuration
                     match setup.wValue {
                         0 => self.usb_reset(),
                         1 => self.set_configuration(),
                         _ => {},
                     }
-                    self.tx_status_ack();
+                    self.control_tx_ack();
                 },
                 _ => {
                     // Reject unknown requests
@@ -181,64 +221,77 @@ impl USB {
         }
     }
 
-    fn tx_status_ack(&self) {
-        unsafe { BTABLE[0].tx_count(0) };
-        self.control_tx_valid();
-    }
-
+    /// Handle a GET_DESCRIPTOR request
     fn process_get_descriptor(&self, w_length: u16, descriptor_type: u8, descriptor_index: u8) {
         match DescriptorType::from_u8(descriptor_type) {
             Some(DescriptorType::Device) => {
+                // Send DEVICE_DESCRIPTOR
+                let n = u16::min(DEVICE_DESCRIPTOR.bLength as u16, w_length) as usize;
                 unsafe {
-                    let n = u16::min(DEVICE_DESCRIPTOR.bLength as u16, w_length) as usize;
                     let data = core::slice::from_raw_parts(
                         &DEVICE_DESCRIPTOR as *const _ as u32 as *const u8, n);
                     EP0BUF.write_tx(data);
                     BTABLE[0].tx_count(n);
-                    self.control_tx_valid();
                 }
+                self.control_tx_valid();
             },
+
             Some(DescriptorType::Configuration) => {
+                // Send CONFIGURATION_DESCRIPTOR, INTERFACE_DESCRIPTOR,
+                // and all ENDPOINT_DESCRIPTORS
+
+                // We need to first copy all the descriptors into a single buffer,
+                // as they are not u16-aligned.
+                let mut buf = [0u8; 64];
+
+                // Copy CONFIGURATION_DESCRIPTOR into buf
+                let n1 = CONFIGURATION_DESCRIPTOR.bLength as usize;
+                let data1 = unsafe { core::slice::from_raw_parts(
+                    &CONFIGURATION_DESCRIPTOR as *const _ as u32 as *const u8, n1)};
+                buf[0..n1].copy_from_slice(data1);
+
+                // Copy INTERFACE_DESCRIPTOR into buf
+                let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
+                let data2 = unsafe { core::slice::from_raw_parts(
+                    &INTERFACE_DESCRIPTOR as *const _ as u32 as *const u8, n2)};
+                buf[n1..n1+n2].copy_from_slice(data2);
+
+                // Copy all ENDPOINT_DESCRIPTORS into buf
+                let mut n = n1+n2;
+                for ep in ENDPOINT_DESCRIPTORS.iter() {
+                    let len = ep.bLength as usize;
+                    let data = unsafe { core::slice::from_raw_parts(
+                        ep as *const _ as u32 as *const u8, len)};
+                    buf[n..n+len].copy_from_slice(data);
+                    n += len;
+                }
+
+                // Only send as much data as was requested
+                let n = usize::min(n, w_length as usize);
+
+                // Copy buf into the actual endpoint buffer
                 unsafe {
-                    let mut buf = [0u8; 64];
-
-                    let n1 = CONFIGURATION_DESCRIPTOR.bLength as usize;
-                    let data1 = core::slice::from_raw_parts(
-                        &CONFIGURATION_DESCRIPTOR as *const _ as u32 as *const u8, n1);
-                    buf[0..n1].copy_from_slice(data1);
-
-                    let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
-                    let data2 = core::slice::from_raw_parts(
-                        &INTERFACE_DESCRIPTOR as *const _ as u32 as *const u8, n2);
-                    buf[n1..n1+n2].copy_from_slice(data2);
-
-                    let mut n = n1+n2;
-                    for ep in ENDPOINT_DESCRIPTORS.iter() {
-                        let len = ep.bLength as usize;
-                        let data = core::slice::from_raw_parts(
-                            ep as *const _ as u32 as *const u8, len);
-                        buf[n..n+len].copy_from_slice(data);
-                        n += len;
-                    }
-
-                    let n = usize::min(n, w_length as usize);
                     EP0BUF.write_tx(&buf[..n]);
                     BTABLE[0].tx_count(n);
-
-                    self.control_tx_valid();
                 }
+
+                // Set up transfer
+                self.control_tx_valid();
             },
+
             Some(DescriptorType::String) => {
+                // Send a STRING descriptor
+                let idx = descriptor_index as usize;
+                let n = u16::min(STRING_DESCRIPTORS[idx].bLength as u16, w_length) as usize;
                 unsafe {
-                    let idx = descriptor_index as usize;
-                    let n = u16::min(STRING_DESCRIPTORS[idx].bLength as u16, w_length) as usize;
                     let data = core::slice::from_raw_parts(
                         &STRING_DESCRIPTORS[idx] as *const _ as u32 as *const u8, n);
                     EP0BUF.write_tx(data);
                     BTABLE[0].tx_count(n);
-                    self.control_tx_valid();
                 }
+                self.control_tx_valid();
             }
+
             // Ignore other descriptor types
             _ => {
                 self.control_stall();
@@ -246,6 +299,7 @@ impl USB {
         }
     }
 
+    /// Handle a vendor-specific request
     fn process_vendor_request(&self, setup: &SetupPID) {
         match VendorRequest::from_u8(setup.bRequest) {
             Some(VendorRequest::SetCS) => {
@@ -255,7 +309,7 @@ impl USB {
                 } else {
                     gpioa.clear(2);
                 }
-                self.tx_status_ack();
+                self.control_tx_ack();
             },
 
             // Ignore unknown requests
@@ -275,18 +329,6 @@ impl USB {
         let stat_rx = read_reg!(usb, self.usb, EP1R, STAT_RX);
         write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: Bulk, CTR_TX: 1, EA: 1,
                    STAT_RX: Self::stat_valid(stat_rx));
-    }
-
-    fn control_tx_valid(&self) {
-        let stat_tx = read_reg!(usb, self.usb, EP0R, STAT_TX);
-        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
-                   STAT_TX: Self::stat_valid(stat_tx));
-    }
-
-    fn control_stall(&self) {
-        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP0R, STAT_TX, STAT_RX);
-        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
-                   STAT_TX: Self::stat_stall(stat_tx), STAT_RX: Self::stat_stall(stat_rx));
     }
 
     /// Return the bit pattern to write to a STAT field to update it to DISABLED
@@ -392,20 +434,20 @@ impl USB {
     }
 
     /// Enable the D+ pullup to attach to host
-    pub fn attach(&self) {
+    fn attach(&self) {
         // Enable the DP pull-up to signal attachment to the host
         modify_reg!(usb, self.usb, BCDR, DPPU: Enabled);
     }
 
     /// Apply specified address to device
-    pub fn set_address(&self, address: u16) {
+    fn set_address(&self, address: u16) {
         modify_reg!(usb, self.usb, DADDR, ADD: address as u32);
     }
 
     /// Set default operational configuration
     ///
     /// Responds to control on EP0 and bidirectional bulk on EP1
-    pub fn set_configuration(&self) {
+    fn set_configuration(&self) {
         // Set up EP1R to be a bidirectional bulk endpoint,
         // with STAT_TX to NAK=10 and STAT_RX to Valid=11,
         // and DTOG_TX and DTOG_RX both set to 0.
