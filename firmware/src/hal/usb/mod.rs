@@ -47,8 +47,6 @@ impl USB {
 
     /// Call this function when a USB interrupt occurs.
     pub fn interrupt(&self) {
-        let gpioa = unsafe { gpio::GPIO::new(stm32ral::gpio::GPIOA::steal()) };
-        gpioa.toggle(2);
         let (ctr, susp, wkup, reset, ep_id) =
             read_reg!(usb, self.usb, ISTR, CTR, SUSP, WKUP, RESET, EP_ID);
         if reset == 1 {
@@ -56,11 +54,15 @@ impl USB {
         } else if ctr == 1 {
             self.ctr(ep_id as u8);
         } else if susp == 1 {
-            // TODO: disable target power and LED
+            // Turn off status LED
+            let gpioa = unsafe { gpio::GPIO::new(stm32ral::gpio::GPIOA::steal()) };
+            gpioa.clear(2);
             // Put USB peripheral into suspend and low-power mode
             modify_reg!(usb, self.usb, CNTR, FSUSP: Suspend, LPMODE: Enabled);
         } else if wkup == 1 {
-            // TODO: re-enable LED
+            // Turn back on status LED
+            let gpioa = unsafe { gpio::GPIO::new(stm32ral::gpio::GPIOA::steal()) };
+            gpioa.set(2);
             // Bring USB peripheral out of suspend
             modify_reg!(usb, self.usb, CNTR, FSUSP: 0);
         }
@@ -145,7 +147,8 @@ impl USB {
                 Some(StandardRequest::GetDescriptor) => {
                     let descriptor_type = setup.wValue >> 8;
                     let descriptor_index = setup.wValue & 0xFF;
-                    self.process_get_descriptor(setup.wLength, descriptor_type as u8, descriptor_index as u8);
+                    self.process_get_descriptor(
+                        setup.wLength, descriptor_type as u8, descriptor_index as u8);
                 },
                 Some(StandardRequest::GetStatus) => {
                     self.tx_status_ack();
@@ -169,12 +172,7 @@ impl USB {
             },
 
             // Process vendor-specific requests
-            SetupType::Vendor => match VendorRequest::from_u8(setup.bRequest) {
-                // Ignore unknown requests
-                _ => {
-                    self.control_stall();
-                },
-            }
+            SetupType::Vendor => self.process_vendor_request(&setup),
 
             // Ignore unknown request types
             _ => {
@@ -242,6 +240,25 @@ impl USB {
                 }
             }
             // Ignore other descriptor types
+            _ => {
+                self.control_stall();
+            },
+        }
+    }
+
+    fn process_vendor_request(&self, setup: &SetupPID) {
+        match VendorRequest::from_u8(setup.bRequest) {
+            Some(VendorRequest::SetCS) => {
+                let gpioa = unsafe { gpio::GPIO::new(stm32ral::gpio::GPIOA::steal()) };
+                if setup.wValue == 1 {
+                    gpioa.set(2);
+                } else {
+                    gpioa.clear(2);
+                }
+                self.tx_status_ack();
+            },
+
+            // Ignore unknown requests
             _ => {
                 self.control_stall();
             },

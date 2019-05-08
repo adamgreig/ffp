@@ -28,11 +28,11 @@ pub enum StandardRequest {
 
 #[repr(u8)]
 pub enum VendorRequest {
-    SetCS,
-    SetFPGA,
-    SetMode,
-    SetTPwr,
-    GetTPwr,
+    SetCS = 1,
+    SetFPGA = 2,
+    SetMode = 3,
+    SetTPwr = 4,
+    GetTPwr = 5,
 }
 
 #[repr(u8)]
@@ -116,24 +116,24 @@ pub struct StringDescriptor {
 
 #[allow(unused)]
 pub enum SetupDirection {
-    HostToDevice,
-    DeviceToHost,
+    HostToDevice = 0,
+    DeviceToHost = 1,
 }
 
 #[derive(PartialEq)]
 pub enum SetupType {
-    Standard,
-    Class,
-    Vendor,
-    Reserved,
+    Standard = 0,
+    Class = 1,
+    Vendor = 2,
+    Reserved = 3,
 }
 
 #[allow(unused)]
 pub enum SetupRecipient {
-    Device,
-    Interface,
-    Endpoint,
-    Other,
+    Device = 0,
+    Interface = 1,
+    Endpoint = 2,
+    Other = 3,
     Unknown,
 }
 
