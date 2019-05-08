@@ -1,6 +1,9 @@
 use core::mem::size_of;
 use super::packets::*;
 
+pub static STRING_LANGS: [u16; 1] = [0x0409];
+pub static STRINGS: [&str; 3] = ["AGG", "FFP r1", "001"];
+
 // Test use only! From http://pid.codes/1209/0001/
 const VENDOR_ID: u16 = 0x1209;
 const PRODUCT_ID: u16 = 0x0001;
@@ -22,37 +25,6 @@ pub static DEVICE_DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
     iSerialNumber: 3,
     bNumConfigurations: 1,
 };
-
-pub static STRING_DESCRIPTORS: [StringDescriptor; 4] = [
-    StringDescriptor {
-        bLength: 4,
-        bDescriptorType: DescriptorType::String as u8,
-        // en_US only
-        bString: [0x09, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-    },
-    StringDescriptor {
-        bLength: 8,
-        bDescriptorType: DescriptorType::String as u8,
-        // "AGG"
-        bString: [0x41, 0x00, 0x47, 0x00, 0x47, 0x00, 0x00, 0x00,
-                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-    },
-    StringDescriptor {
-        bLength: 14,
-        bDescriptorType: DescriptorType::String as u8,
-        // "FFP r1"
-        bString: [0x46, 0x00, 0x46, 0x00, 0x50, 0x00, 0x20, 0x00,
-                  0x72, 0x00, 0x31, 0x00, 0x00, 0x00, 0x00, 0x00],
-    },
-    StringDescriptor {
-        bLength: 8,
-        bDescriptorType: DescriptorType::String as u8,
-        // "001"
-        bString: [0x30, 0x00, 0x30, 0x00, 0x31, 0x00, 0x00, 0x00,
-                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-    },
-];
 
 pub static CONFIGURATION_DESCRIPTOR: ConfigurationDescriptor = ConfigurationDescriptor {
     bLength: size_of::<ConfigurationDescriptor>() as u8,

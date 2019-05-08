@@ -237,7 +237,7 @@ impl USB {
                 let n = u16::min(DEVICE_DESCRIPTOR.bLength as u16, w_length) as usize;
                 unsafe {
                     let data = core::slice::from_raw_parts(
-                        &DEVICE_DESCRIPTOR as *const _ as u32 as *const u8, n);
+                        &DEVICE_DESCRIPTOR as *const _ as *const u8, n);
                     EP0BUF.write_tx(data);
                     BTABLE[0].tx_count(n);
                 }
@@ -255,13 +255,13 @@ impl USB {
                 // Copy CONFIGURATION_DESCRIPTOR into buf
                 let n1 = CONFIGURATION_DESCRIPTOR.bLength as usize;
                 let data1 = unsafe { core::slice::from_raw_parts(
-                    &CONFIGURATION_DESCRIPTOR as *const _ as u32 as *const u8, n1)};
+                    &CONFIGURATION_DESCRIPTOR as *const _ as *const u8, n1)};
                 buf[0..n1].copy_from_slice(data1);
 
                 // Copy INTERFACE_DESCRIPTOR into buf
                 let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
                 let data2 = unsafe { core::slice::from_raw_parts(
-                    &INTERFACE_DESCRIPTOR as *const _ as u32 as *const u8, n2)};
+                    &INTERFACE_DESCRIPTOR as *const _ as *const u8, n2)};
                 buf[n1..n1+n2].copy_from_slice(data2);
 
                 // Copy all ENDPOINT_DESCRIPTORS into buf
@@ -269,7 +269,7 @@ impl USB {
                 for ep in ENDPOINT_DESCRIPTORS.iter() {
                     let len = ep.bLength as usize;
                     let data = unsafe { core::slice::from_raw_parts(
-                        ep as *const _ as u32 as *const u8, len)};
+                        ep as *const _ as *const u8, len)};
                     buf[n..n+len].copy_from_slice(data);
                     n += len;
                 }
@@ -289,11 +289,50 @@ impl USB {
 
             Some(DescriptorType::String) => {
                 // Send a STRING descriptor
-                let idx = descriptor_index as usize;
-                let n = u16::min(STRING_DESCRIPTORS[idx].bLength as u16, w_length) as usize;
+                // First construct the descriptor dynamically; we do this so the
+                // UTF-8 encoded strings can be stored as statics instead of
+                // manually typing out the bytes for UTF-16.
+                let desc = match descriptor_index {
+                    // Special case string 0 which is a list of language IDs
+                    0 => {
+                        let mut desc = StringDescriptor {
+                            bLength: 2 + 2 * STRING_LANGS.len() as u8,
+                            bDescriptorType: DescriptorType::String as u8,
+                            bString: [0u8; 16],
+                        };
+                        // Pack the u16 language codes into the u8 array
+                        for (idx, lang) in STRING_LANGS.iter().enumerate() {
+                            desc.bString[idx*2] = (lang & 0xFF) as u8;
+                            desc.bString[idx*2+1] = (lang >> 8) as u8;
+                        }
+                        desc
+                    },
+
+                    // Handle all other strings
+                    idx if idx as usize <= STRINGS.len() => {
+                        let mut desc = StringDescriptor {
+                            bLength: 2 + 2 * STRINGS[idx as usize - 1].len() as u8,
+                            bDescriptorType: DescriptorType::String as u8,
+                            bString: [0u8; 16],
+                        };
+                        // Encode the &str to an iter of u16 and pack them
+                        let string = STRINGS[idx as usize - 1].encode_utf16();
+                        for (idx, cp) in string.enumerate() {
+                            desc.bString[idx*2] = (cp & 0xFF) as u8;
+                            desc.bString[idx*2+1] = (cp >> 8) as u8;
+                        }
+                        desc
+                    },
+
+                    // Reject any unknown indicies
+                    _ => {
+                        self.control_stall();
+                        return;
+                    }
+                };
+                let n = u16::min(desc.bLength as u16, w_length) as usize;
                 unsafe {
-                    let data = core::slice::from_raw_parts(
-                        &STRING_DESCRIPTORS[idx] as *const _ as u32 as *const u8, n);
+                    let data = core::slice::from_raw_parts(&desc as *const _ as *const u8, n);
                     EP0BUF.write_tx(data);
                     BTABLE[0].tx_count(n);
                 }
