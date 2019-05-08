@@ -33,7 +33,7 @@ fn main() -> ! {
     let tpwr_det = gpiob.pin(6);
     let tpwr_en = gpiob.pin(7);
 
-    led.set_mode_output().set_otype_pushpull().set_ospeed_low().set();
+    led.set_mode_output().set_otype_pushpull().set_ospeed_low().clear();
     cs.set().set_otype_opendrain().set_ospeed_high().set_mode_output();
     fpga_rst.set().set_otype_opendrain().set_ospeed_high().set_mode_output();
     sck.set_mode_alternate().set_af(0).set_otype_pushpull().set_ospeed_veryhigh();
@@ -53,10 +53,7 @@ fn main() -> ! {
     usb.setup();
 
     loop {
-        led.set();
-        cortex_m::asm::delay(1_000_000);
-        led.clear();
-        cortex_m::asm::delay(1_000_000);
+        cortex_m::asm::wfi();
     }
 }
 

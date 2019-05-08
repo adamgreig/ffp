@@ -9,6 +9,7 @@ cortex-m = "0.6.0"
 cortex-m-rt = "0.6.8"
 panic-halt = "0.2.0"
 stm32ral = { version = "0.2.0", features = ["stm32f0x2", "rt"] }
+cortex-m-semihosting = "*"
 
 [profile.release]
 codegen-units = 1

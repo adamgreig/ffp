@@ -1,5 +1,5 @@
 use stm32ral::gpio;
-use stm32ral::{write_reg, modify_reg};
+use stm32ral::{read_reg, write_reg, modify_reg};
 
 pub struct GPIO {
     p: gpio::Instance,
@@ -12,6 +12,10 @@ pub struct Pin<'a> {
 
 impl<'a> GPIO {
     pub fn new(p: gpio::Instance) -> Self {
+        GPIO { p }
+    }
+
+    pub unsafe fn steal(p: gpio::Instance) -> Self {
         GPIO { p }
     }
 
@@ -30,6 +34,16 @@ impl<'a> GPIO {
         assert!(n < 16);
         write_reg!(gpio, self.p, BRR, 1 << n);
         self
+    }
+
+    pub fn toggle(&'a self, n: u8) -> &Self {
+        assert!(n < 16);
+        let pin = (read_reg!(gpio, self.p, IDR) >> n) & 1;
+        if pin == 1 {
+            self.clear(n)
+        } else {
+            self.set(n)
+        }
     }
 
     pub fn set_mode(&'a self, n: u8, mode: u32) -> &Self {
@@ -144,6 +158,11 @@ impl<'a> Pin<'a> {
 
     pub fn clear(&self) -> &Self {
         self.port.clear(self.n);
+        self
+    }
+
+    pub fn toggle(&'a self) -> &Self {
+        self.port.toggle(self.n);
         self
     }
 

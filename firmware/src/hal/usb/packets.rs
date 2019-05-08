@@ -114,6 +114,7 @@ pub struct StringDescriptor {
     pub bString: [u8; 16],
 }
 
+#[allow(unused)]
 pub enum SetupDirection {
     HostToDevice,
     DeviceToHost,
@@ -127,6 +128,7 @@ pub enum SetupType {
     Reserved,
 }
 
+#[allow(unused)]
 pub enum SetupRecipient {
     Device,
     Interface,
@@ -136,16 +138,17 @@ pub enum SetupRecipient {
 }
 
 impl SetupPID {
-    pub fn from_buf(buf: &ControlEPBuf) -> Self {
+    pub fn from_buf(buf: &EPBuf) -> Self {
         SetupPID {
-            bmRequestType: buf.rx[0],
-            bRequest: buf.rx[1],
-            wValue: u16::from_le_bytes([buf.rx[2], buf.rx[3]]),
-            wIndex: u16::from_le_bytes([buf.rx[4], buf.rx[5]]),
-            wLength: u16::from_le_bytes([buf.rx[6], buf.rx[7]]),
+            bmRequestType: (buf.rx[0] & 0xFF) as u8,
+            bRequest: (buf.rx[0] >> 8) as u8,
+            wValue: buf.rx[1],
+            wIndex: buf.rx[2],
+            wLength: buf.rx[3],
         }
     }
 
+    #[allow(unused)]
     pub fn setup_direction(&self) -> SetupDirection {
         match self.bmRequestType & (1 << 7) >> 5 {
             0 => SetupDirection::HostToDevice,
@@ -164,6 +167,7 @@ impl SetupPID {
         }
     }
 
+    #[allow(unused)]
     pub fn setup_recipient(&self) -> SetupRecipient {
         match self.bmRequestType & 0b11111 {
             0 => SetupRecipient::Device,

@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 use stm32ral::usb;
 use stm32ral::{read_reg, write_reg, modify_reg};
 
@@ -10,6 +8,20 @@ mod descriptors;
 use packets::*;
 use buffers::*;
 use descriptors::*;
+
+use super::gpio;
+
+struct State {
+    pending_address: Option<u16>,
+}
+
+impl State {
+    const fn new() -> Self {
+        State { pending_address: None }
+    }
+}
+
+static mut STATE: State = State::new();
 
 pub struct USB {
     usb: usb::Instance,
@@ -35,6 +47,8 @@ impl USB {
 
     /// Call this function when a USB interrupt occurs.
     pub fn interrupt(&self) {
+        let gpioa = unsafe { gpio::GPIO::new(stm32ral::gpio::GPIOA::steal()) };
+        gpioa.toggle(2);
         let (ctr, susp, wkup, reset, ep_id) =
             read_reg!(usb, self.usb, ISTR, CTR, SUSP, WKUP, RESET, EP_ID);
         if reset == 1 {
@@ -50,6 +64,7 @@ impl USB {
             // Bring USB peripheral out of suspend
             modify_reg!(usb, self.usb, CNTR, FSUSP: 0);
         }
+        write_reg!(usb, self.usb, ISTR, 0);
     }
 
     /// Process a communication-completed event by EP `ep_id`
@@ -60,11 +75,15 @@ impl USB {
                 let (ctr_tx, ctr_rx) = read_reg!(usb, self.usb, EP0R, CTR_TX, CTR_RX);
                 if ctr_tx == 1 {
                     self.process_control_tx();
-                    modify_reg!(usb, self.usb, EP0R, CTR_TX: 0);
+                    // Clear CTR_TX
+                    write_reg!(usb, self.usb, EP0R,
+                               CTR_RX: 1, EP_TYPE: Control, CTR_TX: 0, EA: 0);
                 }
                 if ctr_rx == 1 {
                     self.process_control_rx();
-                    modify_reg!(usb, self.usb, EP0R, CTR_RX: 0);
+                    // Clear CTR_RX
+                    write_reg!(usb, self.usb, EP0R,
+                               CTR_RX: 0, EP_TYPE: Control, CTR_TX: 1, EA: 0);
                 }
             },
 
@@ -73,11 +92,15 @@ impl USB {
                 let (ctr_tx, ctr_rx) = read_reg!(usb, self.usb, EP0R, CTR_TX, CTR_RX);
                 if ctr_tx == 1 {
                     self.process_data_tx();
-                    modify_reg!(usb, self.usb, EP0R, CTR_TX: 0);
+                    // Clear CTR_TX
+                    write_reg!(usb, self.usb, EP1R,
+                               CTR_RX: 1, EP_TYPE: Bulk, CTR_TX: 0, EA: 1);
                 }
                 if ctr_rx == 1 {
                     self.process_data_rx();
-                    modify_reg!(usb, self.usb, EP0R, CTR_RX: 0);
+                    // Clear CTR_RX
+                    write_reg!(usb, self.usb, EP1R,
+                               CTR_RX: 0, EP_TYPE: Bulk, CTR_TX: 1, EA: 1);
                 }
             },
 
@@ -88,6 +111,13 @@ impl USB {
 
     /// Process transmission complete on EP0
     fn process_control_tx(&self) {
+        match unsafe { STATE.pending_address } {
+            Some(addr) => {
+                self.set_address(addr);
+                unsafe { STATE.pending_address = None };
+            },
+            None => (),
+        }
     }
 
     /// Process reception complete on EP0
@@ -102,25 +132,26 @@ impl USB {
     fn control_rx_ack(&self) {
         // Indicate we're ready to receive again
         let stat_rx = read_reg!(usb, self.usb, EP0R, STAT_RX);
-        modify_reg!(usb, self.usb, EP0R, STAT_RX: Self::stat_valid(stat_rx));
+        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
+                   STAT_RX: Self::stat_valid(stat_rx));
     }
 
     /// Process receiving a SETUP packet
     fn process_setup_rx(&self) {
-        let setup = unsafe { SetupPID::from_buf(&*EP0BUF) };
+        let setup = unsafe { SetupPID::from_buf(&EP0BUF) };
         match setup.setup_type() {
             // Process standard requests
             SetupType::Standard => match StandardRequest::from_u8(setup.bRequest) {
                 Some(StandardRequest::GetDescriptor) => {
                     let descriptor_type = setup.wValue >> 8;
                     let descriptor_index = setup.wValue & 0xFF;
-                    self.process_get_descriptor(descriptor_type as u8, descriptor_index as u8);
+                    self.process_get_descriptor(setup.wLength, descriptor_type as u8, descriptor_index as u8);
                 },
                 Some(StandardRequest::GetStatus) => {
                     self.tx_status_ack();
                 },
                 Some(StandardRequest::SetAddress) => {
-                    self.set_address(setup.wValue);
+                    unsafe { STATE.pending_address = Some(setup.wValue) };
                     self.tx_status_ack();
                 },
                 Some(StandardRequest::SetConfiguration) => {
@@ -131,70 +162,89 @@ impl USB {
                     }
                     self.tx_status_ack();
                 },
-                // Ignore all other requests
-                _ => {},
+                _ => {
+                    // Reject unknown requests
+                    self.control_stall();
+                },
             },
 
             // Process vendor-specific requests
             SetupType::Vendor => match VendorRequest::from_u8(setup.bRequest) {
                 // Ignore unknown requests
-                _ => {},
+                _ => {
+                    self.control_stall();
+                },
             }
 
             // Ignore unknown request types
-            _ => {},
+            _ => {
+                self.control_stall();
+            },
         }
     }
 
     fn tx_status_ack(&self) {
-        unsafe { (*BTABLE)[0].tx_count(0) };
+        unsafe { BTABLE[0].tx_count(0) };
         self.control_tx_valid();
     }
 
-    fn process_get_descriptor(&self, descriptor_type: u8, descriptor_index: u8) {
+    fn process_get_descriptor(&self, w_length: u16, descriptor_type: u8, descriptor_index: u8) {
         match DescriptorType::from_u8(descriptor_type) {
             Some(DescriptorType::Device) => {
                 unsafe {
-                    let n = DEVICE_DESCRIPTOR.bLength as usize;
+                    let n = u16::min(DEVICE_DESCRIPTOR.bLength as u16, w_length) as usize;
                     let data = core::slice::from_raw_parts(
                         &DEVICE_DESCRIPTOR as *const _ as u32 as *const u8, n);
-                    (*EP0BUF).write_tx(data);
-                    (*BTABLE)[0].tx_count(n);
+                    EP0BUF.write_tx(data);
+                    BTABLE[0].tx_count(n);
                     self.control_tx_valid();
                 }
             },
             Some(DescriptorType::Configuration) => {
                 unsafe {
+                    let mut buf = [0u8; 64];
+
                     let n1 = CONFIGURATION_DESCRIPTOR.bLength as usize;
-                    let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
-                    let n3 = ENDPOINT_DESCRIPTORS
-                        .iter().map(|d| d.bLength as usize).sum();
                     let data1 = core::slice::from_raw_parts(
                         &CONFIGURATION_DESCRIPTOR as *const _ as u32 as *const u8, n1);
+                    buf[0..n1].copy_from_slice(data1);
+
+                    let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
                     let data2 = core::slice::from_raw_parts(
                         &INTERFACE_DESCRIPTOR as *const _ as u32 as *const u8, n2);
-                    let data3 = core::slice::from_raw_parts(
-                        &ENDPOINT_DESCRIPTORS as *const _ as u32 as *const u8, n3);
-                    (*EP0BUF).tx[0..n1].copy_from_slice(data1);
-                    (*EP0BUF).tx[n1..n1+n2].copy_from_slice(data2);
-                    (*EP0BUF).tx[n1+n2..n1+n2+n3].copy_from_slice(data3);
-                    (*BTABLE)[0].tx_count(n1+n2+n3);
+                    buf[n1..n1+n2].copy_from_slice(data2);
+
+                    let mut n = n1+n2;
+                    for ep in ENDPOINT_DESCRIPTORS.iter() {
+                        let len = ep.bLength as usize;
+                        let data = core::slice::from_raw_parts(
+                            ep as *const _ as u32 as *const u8, len);
+                        buf[n..n+len].copy_from_slice(data);
+                        n += len;
+                    }
+
+                    let n = usize::min(n, w_length as usize);
+                    EP0BUF.write_tx(&buf[..n]);
+                    BTABLE[0].tx_count(n);
+
                     self.control_tx_valid();
                 }
             },
             Some(DescriptorType::String) => {
                 unsafe {
                     let idx = descriptor_index as usize;
-                    let n = STRING_DESCRIPTORS[idx].bLength as usize;
+                    let n = u16::min(STRING_DESCRIPTORS[idx].bLength as u16, w_length) as usize;
                     let data = core::slice::from_raw_parts(
                         &STRING_DESCRIPTORS[idx] as *const _ as u32 as *const u8, n);
-                    (*EP0BUF).write_tx(data);
-                    (*BTABLE)[0].tx_count(n);
+                    EP0BUF.write_tx(data);
+                    BTABLE[0].tx_count(n);
                     self.control_tx_valid();
                 }
             }
             // Ignore other descriptor types
-            _ => {},
+            _ => {
+                self.control_stall();
+            },
         }
     }
 
@@ -206,23 +256,25 @@ impl USB {
     fn process_data_rx(&self) {
         // Indicate we're ready to receive again
         let stat_rx = read_reg!(usb, self.usb, EP1R, STAT_RX);
-        modify_reg!(usb, self.usb, EP1R, STAT_RX: Self::stat_valid(stat_rx));
+        write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: Bulk, CTR_TX: 1, EA: 1,
+                   STAT_RX: Self::stat_valid(stat_rx));
     }
 
     fn control_tx_valid(&self) {
-        unsafe { (*BTABLE)[0].tx_count(0) };
-        let stat_tx = read_reg!(usb, self.usb, EP1R, STAT_TX);
-        modify_reg!(usb, self.usb, EP0R, STAT_TX: Self::stat_valid(stat_tx));
+        let stat_tx = read_reg!(usb, self.usb, EP0R, STAT_TX);
+        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
+                   STAT_TX: Self::stat_valid(stat_tx));
     }
 
-    fn control_tx_stall(&self) {
-        let stat_tx = read_reg!(usb, self.usb, EP1R, STAT_TX);
-        modify_reg!(usb, self.usb, EP0R, STAT_TX: Self::stat_stall(stat_tx));
+    fn control_stall(&self) {
+        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP0R, STAT_TX, STAT_RX);
+        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
+                   STAT_TX: Self::stat_stall(stat_tx), STAT_RX: Self::stat_stall(stat_rx));
     }
 
     /// Return the bit pattern to write to a STAT field to update it to DISABLED
     fn stat_disabled(stat: u32) -> u32 {
-        (!stat & 0b10) | (!stat & 0b01)
+        (stat & 0b10) | (stat & 0b01)
     }
 
     /// Return the bit pattern to write to a STAT field to update it to STALL
@@ -237,7 +289,7 @@ impl USB {
 
     /// Return the bit pattern to write to a STAT field to update it to VALID
     fn stat_valid(stat: u32) -> u32 {
-        (stat & 0b10) | (stat & 0b01)
+        (!stat & 0b10) | (!stat & 0b01)
     }
 
     /// Apply the power-on reset sequence
@@ -251,29 +303,31 @@ impl USB {
         cortex_m::asm::delay(48);
         // Bring USB transceiver out of reset
         modify_reg!(usb, self.usb, CNTR, PDWN: Disabled, FRES: NoReset);
+        // Ensure we remain nonresponsive to requests
+        write_reg!(usb, self.usb, DADDR, EF: Disabled);
         // Write the buffer table descriptor
         self.write_btable();
         // Set buffer table to start at BTABLE.
         // We write the entire register to avoid dealing with the shifted-by-3 field.
-        write_reg!(usb, self.usb, BTABLE, (BTABLE as u32) - USB_SRAM);
+        unsafe { write_reg!(usb, self.usb, BTABLE, (&BTABLE as *const _ as u32) - USB_SRAM) };
         // Clear ISTR
         write_reg!(usb, self.usb, ISTR, 0);
         // Enable reset masks
         modify_reg!(usb, self.usb, CNTR,
                     CTRM: Enabled, RESETM: Enabled, SUSPM: Enabled, WKUPM: Enabled);
-        // Ensure we remain nonresponsive to requests
-        write_reg!(usb, self.usb, DADDR, EF: Disabled);
     }
 
     /// Write the BTABLE descriptor with the addresses and sizes of the available buffers
     fn write_btable(&self) {
         unsafe {
-            (*BTABLE)[0].ADDR_TX.write((&(*EP0BUF).tx as *const _ as u32 - USB_SRAM) as u16);
-            (*BTABLE)[0].ADDR_RX.write((&(*EP0BUF).rx as *const _ as u32 - USB_SRAM) as u16);
-            (*BTABLE)[0].COUNT_RX.write((1<<15) | (64 / 32) << 10);
-            (*BTABLE)[1].ADDR_TX.write((&(*EP1BUF).tx as *const _ as u32 - USB_SRAM) as u16);
-            (*BTABLE)[1].ADDR_RX.write((&(*EP1BUF).rx as *const _ as u32 - USB_SRAM) as u16);
-            (*BTABLE)[1].COUNT_RX.write((1<<15) | (256 / 32) << 10);
+            BTABLE[0].ADDR_TX = (&EP0BUF.tx as *const _ as u32 - USB_SRAM) as u16;
+            BTABLE[0].ADDR_RX = (&EP0BUF.rx as *const _ as u32 - USB_SRAM) as u16;
+            BTABLE[0].COUNT_TX = 0;
+            BTABLE[0].COUNT_RX = (1<<15) | (64 / 32) << 10;
+            BTABLE[1].ADDR_TX = (&EP1BUF.tx as *const _ as u32 - USB_SRAM) as u16;
+            BTABLE[1].ADDR_RX = (&EP1BUF.rx as *const _ as u32 - USB_SRAM) as u16;
+            BTABLE[1].COUNT_TX = 0;
+            BTABLE[1].COUNT_RX = (1<<15) | (256 / 32) << 10;
         }
     }
 
@@ -335,24 +389,13 @@ impl USB {
     ///
     /// Responds to control on EP0 and bidirectional bulk on EP1
     pub fn set_configuration(&self) {
-        // Ensure peripheral will not respond while we set up endpoints
-        modify_reg!(usb, self.usb, DADDR, EF: Disabled);
-
-        // Set up EP0R to handle default control endpoint.
-        // Note STAT_TX/STAT_RX bits are write-1-to-toggle, write-0-to-leave-unchanged,
-        // we want to set STAT_RX to Valid=11 and STAT_TX to Nak=10.
-        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP0R, STAT_TX, STAT_RX);
-        write_reg!(usb, self.usb, EP0R,
-                   CTR_RX: 0, EP_TYPE: Control, EP_KIND: 0, CTR_TX: 0, EA: 0,
-                   STAT_TX: Self::stat_nak(stat_tx), STAT_RX: Self::stat_valid(stat_rx));
-
-        // Set up EP1R to be a bidirectional interrupt endpoint,
+        // Set up EP1R to be a bidirectional bulk endpoint,
         // with STAT_TX to NAK=10 and STAT_RX to Valid=11,
         // and DTOG_TX and DTOG_RX both set to 0.
         let (stat_tx, stat_rx, dtog_rx, dtog_tx) =
             read_reg!(usb, self.usb, EP1R, STAT_TX, STAT_RX, DTOG_RX, DTOG_TX);
         write_reg!(usb, self.usb, EP1R,
-                   CTR_RX: 0, EP_TYPE: Interrupt, EP_KIND: 0, CTR_TX: 0, EA: 0,
+                   CTR_RX: 1, EP_TYPE: Bulk, EP_KIND: 0, CTR_TX: 1, EA: 1,
                    DTOG_RX: dtog_rx, DTOG_TX: dtog_tx,
                    STAT_TX: Self::stat_nak(stat_tx), STAT_RX: Self::stat_valid(stat_rx));
 
@@ -372,8 +415,5 @@ impl USB {
         write_reg!(usb, self.usb, EP6R, STAT_TX: stat_tx, STAT_RX: stat_rx);
         let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP7R, STAT_TX, STAT_RX);
         write_reg!(usb, self.usb, EP7R, STAT_TX: stat_tx, STAT_RX: stat_rx);
-
-        // Set EF=1 with address 0 to enable processing incoming packets
-        modify_reg!(usb, self.usb, DADDR, EF: Enabled);
     }
 }
