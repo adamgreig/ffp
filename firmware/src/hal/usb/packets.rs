@@ -112,7 +112,7 @@ pub struct EndpointDescriptor {
 pub struct StringDescriptor {
     pub bLength: u8,
     pub bDescriptorType: u8,
-    pub bString: [u8; 16],
+    pub bString: [u8; 32],
 }
 
 #[allow(unused)]

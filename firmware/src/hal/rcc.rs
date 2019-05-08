@@ -11,10 +11,6 @@ impl RCC {
         RCC { rcc, crs }
     }
 
-    pub unsafe fn steal() -> Self {
-        RCC { rcc: rcc::RCC::steal(), crs: crs::CRS::steal() }
-    }
-
     /// Set up the device, enabling all required clocks
     pub fn setup(&self) {
         // Turn on HSI48

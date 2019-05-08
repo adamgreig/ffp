@@ -3,7 +3,6 @@
 
 extern crate panic_halt;
 use cortex_m_rt::{entry, pre_init};
-use stm32ral::interrupt;
 
 pub mod hal;
 
@@ -21,7 +20,8 @@ fn main() -> ! {
     rcc.setup();
 
     // Configure interrupts
-    let nvic = hal::nvic::NVIC::new(stm32ral::nvic::NVIC::take().unwrap());
+    let nvic = hal::nvic::NVIC::new(stm32ral::nvic::NVIC::take().unwrap(),
+                                    stm32ral::scb::SCB::take().unwrap());
     nvic.setup();
 
     // Configure IO
@@ -55,20 +55,20 @@ fn main() -> ! {
     spi.setup();
 
     // Configure USB
-    let usb = hal::usb::USB::new(stm32ral::usb::USB::take().unwrap());
+    let mut usb = hal::usb::USB::new(stm32ral::usb::USB::take().unwrap());
     usb.setup();
 
     loop {
-        cortex_m::asm::wfi();
+        // Process pending interrupts
+        if nvic.usb_pending() {
+            usb.interrupt();
+            nvic.unpend_usb();
+        } else if nvic.spi1_pending() {
+            spi.interrupt();
+            nvic.unpend_spi1();
+        } else {
+            // Sleep until an interrupt occurs
+            cortex_m::asm::wfe();
+        }
     }
-}
-
-#[interrupt]
-unsafe fn USB() {
-    hal::usb::USB::steal().interrupt();
-}
-
-#[interrupt]
-unsafe fn SPI1() {
-    hal::spi::SPI::new(stm32ral::spi::SPI1::steal()).interrupt();
 }

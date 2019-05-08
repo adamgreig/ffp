@@ -11,34 +11,17 @@ use descriptors::*;
 
 use super::{gpio, bootload};
 
-/// Store persistent state for USB stack
-struct State {
-    pending_address: Option<u16>,
-    pending_bootload: bool,
-}
-
-impl State {
-    const fn new() -> Self {
-        State { pending_address: None, pending_bootload: false, }
-    }
-}
-
-static mut STATE: State = State::new();
-
 /// USB stack interface
 pub struct USB {
     usb: usb::Instance,
+    pending_address: Option<u16>,
+    pending_bootload: bool,
 }
 
 impl USB {
     /// Create a new USB object from the peripheral instance
     pub fn new(usb: usb::Instance) -> Self {
-        USB { usb }
-    }
-
-    /// Unsafely force creation of a new USB object
-    pub unsafe fn steal() -> Self {
-        USB { usb: usb::USB::steal() }
+        USB { usb, pending_address: None, pending_bootload: false }
     }
 
     /// Initialise the USB peripheral ready to start processing packets
@@ -49,9 +32,10 @@ impl USB {
     }
 
     /// Call this function when a USB interrupt occurs.
-    pub fn interrupt(&self) {
+    pub fn interrupt(&mut self) {
         let (ctr, susp, wkup, reset, ep_id) =
             read_reg!(usb, self.usb, ISTR, CTR, SUSP, WKUP, RESET, EP_ID);
+        write_reg!(usb, self.usb, ISTR, 0);
         if reset == 1 {
             self.usb_reset();
         } else if ctr == 1 {
@@ -69,11 +53,10 @@ impl USB {
             // Bring USB peripheral out of suspend
             modify_reg!(usb, self.usb, CNTR, FSUSP: 0);
         }
-        write_reg!(usb, self.usb, ISTR, 0);
     }
 
     /// Process a communication-completed event by EP `ep_id`
-    fn ctr(&self, ep_id: u8) {
+    fn ctr(&mut self, ep_id: u8) {
         match ep_id {
             // Handle events on control EP0
             0 => {
@@ -117,27 +100,27 @@ impl USB {
     }
 
     /// Process transmission complete on EP0
-    fn process_control_tx(&self) {
+    fn process_control_tx(&mut self) {
         // If we had a pending address change, we must have just sent the STATUS ACK,
         // so apply the new address now and clear the pending change.
-        match unsafe { STATE.pending_address } {
+        match self.pending_address {
             Some(addr) => {
                 self.set_address(addr);
-                unsafe { STATE.pending_address = None };
+                self.pending_address = None;
             },
             None => (),
         }
 
         // If we had a pending bootload, we've now sent the ACK, so
         // go ahead and reset the device.
-        if unsafe { STATE.pending_bootload } {
+        if self.pending_bootload {
             self.detach();
             bootload::bootload();
         }
     }
 
     /// Process reception complete on EP0
-    fn process_control_rx(&self) {
+    fn process_control_rx(&mut self) {
         // Check if we received a SETUP packet
         if read_reg!(usb, self.usb, EP0R, SETUP) == 1 {
             self.process_setup_rx();
@@ -179,7 +162,7 @@ impl USB {
     }
 
     /// Process receiving a SETUP packet
-    fn process_setup_rx(&self) {
+    fn process_setup_rx(&mut self) {
         let setup = unsafe { SetupPID::from_buf(&EP0BUF) };
         match setup.setup_type() {
             // Process standard requests
@@ -201,7 +184,7 @@ impl USB {
                 },
                 Some(StandardRequest::SetAddress) => {
                     // Store new address for application after sending STATUS back
-                    unsafe { STATE.pending_address = Some(setup.wValue) };
+                    self.pending_address = Some(setup.wValue);
                     self.control_tx_ack();
                 },
                 Some(StandardRequest::SetConfiguration) => {
@@ -298,7 +281,7 @@ impl USB {
                         let mut desc = StringDescriptor {
                             bLength: 2 + 2 * STRING_LANGS.len() as u8,
                             bDescriptorType: DescriptorType::String as u8,
-                            bString: [0u8; 16],
+                            bString: [0u8; 32],
                         };
                         // Pack the u16 language codes into the u8 array
                         for (idx, lang) in STRING_LANGS.iter().enumerate() {
@@ -313,7 +296,7 @@ impl USB {
                         let mut desc = StringDescriptor {
                             bLength: 2 + 2 * STRINGS[idx as usize - 1].len() as u8,
                             bDescriptorType: DescriptorType::String as u8,
-                            bString: [0u8; 16],
+                            bString: [0u8; 32],
                         };
                         // Encode the &str to an iter of u16 and pack them
                         let string = STRINGS[idx as usize - 1].encode_utf16();
@@ -347,7 +330,7 @@ impl USB {
     }
 
     /// Handle a vendor-specific request
-    fn process_vendor_request(&self, setup: &SetupPID) {
+    fn process_vendor_request(&mut self, setup: &SetupPID) {
         match VendorRequest::from_u8(setup.bRequest) {
             Some(VendorRequest::SetCS) => {
                 let gpioa = unsafe { gpio::GPIO::new(stm32ral::gpio::GPIOA::steal()) };
@@ -359,8 +342,24 @@ impl USB {
                 self.control_tx_ack();
             },
 
+            Some(VendorRequest::SetFPGA) => {
+                self.control_tx_ack();
+            },
+
+            Some(VendorRequest::SetMode) => {
+                self.control_tx_ack();
+            },
+
+            Some(VendorRequest::SetTPwr) => {
+                self.control_tx_ack();
+            },
+
+            Some(VendorRequest::GetTPwr) => {
+                self.control_tx_ack();
+            },
+
             Some(VendorRequest::Bootload) => {
-                unsafe { STATE.pending_bootload = true };
+                self.pending_bootload = true;
                 self.control_tx_ack();
             },
 

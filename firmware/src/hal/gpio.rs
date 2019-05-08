@@ -15,10 +15,6 @@ impl<'a> GPIO {
         GPIO { p }
     }
 
-    pub unsafe fn steal(p: gpio::Instance) -> Self {
-        GPIO { p }
-    }
-
     pub fn pin(&'a self, n: u8) -> Pin<'a> {
         assert!(n < 16);
         Pin { n, port: self }
