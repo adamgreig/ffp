@@ -9,16 +9,17 @@ use packets::*;
 use buffers::*;
 use descriptors::*;
 
-use super::gpio;
+use super::{gpio, bootload};
 
 /// Store persistent state for USB stack
 struct State {
     pending_address: Option<u16>,
+    pending_bootload: bool,
 }
 
 impl State {
     const fn new() -> Self {
-        State { pending_address: None }
+        State { pending_address: None, pending_bootload: false, }
     }
 }
 
@@ -125,6 +126,13 @@ impl USB {
                 unsafe { STATE.pending_address = None };
             },
             None => (),
+        }
+
+        // If we had a pending bootload, we've now sent the ACK, so
+        // go ahead and reset the device.
+        if unsafe { STATE.pending_bootload } {
+            self.detach();
+            bootload::bootload();
         }
     }
 
@@ -312,6 +320,11 @@ impl USB {
                 self.control_tx_ack();
             },
 
+            Some(VendorRequest::Bootload) => {
+                unsafe { STATE.pending_bootload = true };
+                self.control_tx_ack();
+            },
+
             // Ignore unknown requests
             _ => {
                 self.control_stall();
@@ -433,10 +446,16 @@ impl USB {
         write_reg!(usb, self.usb, DADDR, ADD: 0, EF: Enabled);
     }
 
-    /// Enable the D+ pullup to attach to host
+    /// Enable the D+ pullup to attach to the host
     fn attach(&self) {
         // Enable the DP pull-up to signal attachment to the host
         modify_reg!(usb, self.usb, BCDR, DPPU: Enabled);
+    }
+
+    /// Disable the D+ pullup to detach from the host
+    fn detach(&self) {
+        // Enable the DP pull-up to signal attachment to the host
+        modify_reg!(usb, self.usb, BCDR, DPPU: Disabled);
     }
 
     /// Apply specified address to device

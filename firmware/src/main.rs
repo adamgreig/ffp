@@ -9,6 +9,9 @@ pub mod hal;
 
 #[entry]
 fn main() -> ! {
+    // Check if we should jump to system bootloader
+    hal::bootload::check();
+
     // Configure clocks
     let rcc = hal::rcc::RCC::new(stm32ral::rcc::RCC::take().unwrap(),
                                  stm32ral::crs::CRS::take().unwrap());

@@ -33,6 +33,7 @@ pub enum VendorRequest {
     SetMode = 3,
     SetTPwr = 4,
     GetTPwr = 5,
+    Bootload = 6,
 }
 
 #[repr(u8)]
@@ -243,6 +244,8 @@ impl VendorRequest {
                 Some(VendorRequest::SetTPwr),
             x if x == VendorRequest::GetTPwr as u8 =>
                 Some(VendorRequest::GetTPwr),
+            x if x == VendorRequest::Bootload as u8 =>
+                Some(VendorRequest::Bootload),
             _ => None,
         }
     }
