@@ -28,7 +28,7 @@ impl RCC {
 
         // Enable peripheral clocks
         modify_reg!(rcc, self.rcc, AHBENR, IOPAEN: Enabled, IOPBEN: Enabled, DMAEN: Enabled);
-        modify_reg!(rcc, self.rcc, APB1ENR, PWREN: Enabled, CRSEN: Enabled, USBEN: Enabled);
+        modify_reg!(rcc, self.rcc, APB1ENR, CRSEN: Enabled, USBEN: Enabled);
         modify_reg!(rcc, self.rcc, APB2ENR, SPI1EN: Enabled);
 
         // Enable CRS (default CFGR values are appropriate for USB SOF sync)

@@ -2,16 +2,19 @@
 #![no_main]
 
 extern crate panic_halt;
-use cortex_m_rt::entry;
+use cortex_m_rt::{entry, pre_init};
 use stm32ral::interrupt;
 
 pub mod hal;
 
-#[entry]
-fn main() -> ! {
+#[pre_init]
+unsafe fn preinit() {
     // Check if we should jump to system bootloader
     hal::bootload::check();
+}
 
+#[entry]
+fn main() -> ! {
     // Configure clocks
     let rcc = hal::rcc::RCC::new(stm32ral::rcc::RCC::take().unwrap(),
                                  stm32ral::crs::CRS::take().unwrap());
