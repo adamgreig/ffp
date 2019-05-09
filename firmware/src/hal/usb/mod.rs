@@ -14,6 +14,9 @@ use crate::app::{PinState, Mode, Request};
 /// USB stack interface
 pub struct USB {
     usb: usb::Instance,
+    btable: &'static mut [BTableRow; 8],
+    ep0buf: &'static mut EPBuf,
+    ep1buf: &'static mut EPBuf,
     pending_address: Option<u16>,
     pending_request: Option<Request>,
     pending_request_ready: bool,
@@ -22,16 +25,24 @@ pub struct USB {
 impl USB {
     /// Create a new USB object from the peripheral instance
     pub fn new(usb: usb::Instance) -> Self {
-        USB {
-            usb,
-            pending_address: None,
-            pending_request: None,
-            pending_request_ready: false,
+        // UNSAFE: We can only be given a usb::Instance _once_ safely,
+        // so if we've been given one, we can also safely take ownership
+        // of the static buffers.
+        unsafe {
+            USB {
+                usb,
+                btable: &mut BTABLE,
+                ep0buf: &mut EP0BUF,
+                ep1buf: &mut EP1BUF,
+                pending_address: None,
+                pending_request: None,
+                pending_request_ready: false,
+            }
         }
     }
 
     /// Initialise the USB peripheral ready to start processing packets
-    pub fn setup(&self) {
+    pub fn setup(&mut self) {
         self.power_on_reset();
         self.usb_reset();
         self.attach();
@@ -77,13 +88,13 @@ impl USB {
     }
 
     /// Transmit the current tpwr state in response to a recent GetTPwr request
-    pub fn reply_tpwr(&self, tpwr: PinState) {
+    pub fn reply_tpwr(&mut self, tpwr: PinState) {
         let data = [tpwr as u8, 0];
         self.control_tx_slice(&data[..]);
     }
 
     /// Transmit a given slice of data out the bulk endpoint
-    pub fn reply_data(&self, data: &[u8]) {
+    pub fn reply_data(&mut self, data: &[u8]) {
         self.data_tx_slice(data);
     }
 
@@ -180,12 +191,10 @@ impl USB {
     }
 
     /// Return the given slice as data
-    fn control_tx_slice(&self, data: &[u8]) {
+    fn control_tx_slice(&mut self, data: &[u8]) {
         assert!(data.len() <= 64);
-        unsafe {
-            EP0BUF.write_tx(data);
-            BTABLE[0].tx_count(data.len());
-        }
+        self.ep0buf.write_tx(data);
+        self.btable[0].tx_count(data.len());
         self.control_tx_valid();
     }
 
@@ -209,14 +218,14 @@ impl USB {
     }
 
     /// Send a 0-length ACK STATUS response to the next IN transfer
-    fn control_tx_ack(&self) {
-        unsafe { BTABLE[0].tx_count(0) };
+    fn control_tx_ack(&mut self) {
+        self.btable[0].tx_count(0);
         self.control_tx_valid();
     }
 
     /// Process receiving a SETUP packet
     fn process_setup_rx(&mut self) {
-        let setup = unsafe { SetupPID::from_buf(&EP0BUF) };
+        let setup = SetupPID::from_buf(&self.ep0buf);
         match setup.setup_type() {
             // Process standard requests
             SetupType::Standard => match StandardRequest::from_u8(setup.bRequest) {
@@ -261,7 +270,9 @@ impl USB {
     }
 
     /// Handle a GET_DESCRIPTOR request
-    fn process_get_descriptor(&self, w_length: u16, descriptor_type: u8, descriptor_index: u8) {
+    fn process_get_descriptor(
+        &mut self, w_length: u16, descriptor_type: u8, descriptor_index: u8
+    ) {
         match DescriptorType::from_u8(descriptor_type) {
             Some(DescriptorType::Device) =>
                 self.process_get_device_descriptor(w_length),
@@ -277,31 +288,33 @@ impl USB {
     }
 
     /// Transmit DEVICE descriptor
-    fn process_get_device_descriptor(&self, w_length: u16) {
+    fn process_get_device_descriptor(&mut self, w_length: u16) {
         let n = u16::min(DEVICE_DESCRIPTOR.bLength as u16, w_length) as usize;
-        unsafe {
-            let data = core::slice::from_raw_parts(
-                &DEVICE_DESCRIPTOR as *const _ as *const u8, n);
-            EP0BUF.write_tx(data);
-            BTABLE[0].tx_count(n);
-        }
+        // UNSAFE: Reading static packed memory of known length as a &[u8]
+        let data = unsafe { core::slice::from_raw_parts(
+            &DEVICE_DESCRIPTOR as *const _ as *const u8, n)
+        };
+        self.ep0buf.write_tx(data);
+        self.btable[0].tx_count(n);
         self.control_tx_valid();
     }
 
     /// Transmit CONFIGURATION, INTERFACE, and all ENDPOINT descriptors
-    fn process_get_configuration_descriptor(&self, w_length: u16) {
+    fn process_get_configuration_descriptor(&mut self, w_length: u16) {
         // We need to first copy all the descriptors into a single buffer,
         // as they are not u16-aligned.
         let mut buf = [0u8; 64];
 
         // Copy CONFIGURATION_DESCRIPTOR into buf
         let n1 = CONFIGURATION_DESCRIPTOR.bLength as usize;
+        // UNSAFE: Reading static packed memory of known length as a &[u8]
         let data1 = unsafe { core::slice::from_raw_parts(
             &CONFIGURATION_DESCRIPTOR as *const _ as *const u8, n1)};
         buf[0..n1].copy_from_slice(data1);
 
         // Copy INTERFACE_DESCRIPTOR into buf
         let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
+        // UNSAFE: Reading static packed memory of known length as a &[u8]
         let data2 = unsafe { core::slice::from_raw_parts(
             &INTERFACE_DESCRIPTOR as *const _ as *const u8, n2)};
         buf[n1..n1+n2].copy_from_slice(data2);
@@ -310,6 +323,7 @@ impl USB {
         let mut n = n1+n2;
         for ep in ENDPOINT_DESCRIPTORS.iter() {
             let len = ep.bLength as usize;
+            // UNSAFE: Reading static packed memory of known length as a &[u8]
             let data = unsafe { core::slice::from_raw_parts(
                 ep as *const _ as *const u8, len)};
             buf[n..n+len].copy_from_slice(data);
@@ -320,17 +334,15 @@ impl USB {
         let n = usize::min(n, w_length as usize);
 
         // Copy buf into the actual endpoint buffer
-        unsafe {
-            EP0BUF.write_tx(&buf[..n]);
-            BTABLE[0].tx_count(n);
-        }
+        self.ep0buf.write_tx(&buf[..n]);
+        self.btable[0].tx_count(n);
 
         // Set up transfer
         self.control_tx_valid();
     }
 
     /// Transmit STRING descriptor
-    fn process_get_string_descriptor(&self, w_length: u16, idx: u8) {
+    fn process_get_string_descriptor(&mut self, w_length: u16, idx: u8) {
         // Send a STRING descriptor
         // First construct the descriptor dynamically; we do this so the
         // UTF-8 encoded strings can be stored as statics instead of
@@ -378,11 +390,10 @@ impl USB {
 
         let n = u16::min(desc.bLength as u16, w_length) as usize;
 
-        unsafe {
-            let data = core::slice::from_raw_parts(&desc as *const _ as *const u8, n);
-            EP0BUF.write_tx(data);
-            BTABLE[0].tx_count(n);
-        }
+        // UNSAFE: Converting a newly created object of known size to &[u8]
+        let data = unsafe { core::slice::from_raw_parts(&desc as *const _ as *const u8, n) };
+        self.ep0buf.write_tx(data);
+        self.btable[0].tx_count(n);
         self.control_tx_valid();
     }
 
@@ -468,7 +479,7 @@ impl USB {
     fn process_data_rx(&mut self) {
         // Copy the received data
         let mut data = [0u8; 64];
-        unsafe { EP1BUF.read_rx(&BTABLE[1], &mut data); }
+        self.ep1buf.read_rx(&self.btable[1], &mut data);
         self.pending_request = Some(Request::Transmit(data));
         self.pending_request_ready = true;
 
@@ -484,12 +495,10 @@ impl USB {
                    STAT_RX: Self::stat_valid(stat_rx));
     }
 
-    fn data_tx_slice(&self, data: &[u8]) {
+    fn data_tx_slice(&mut self, data: &[u8]) {
         assert!(data.len() <= 64);
-        unsafe {
-            EP1BUF.write_tx(data);
-            BTABLE[1].tx_count(data.len());
-        }
+        self.ep1buf.write_tx(data);
+        self.btable[1].tx_count(data.len());
         self.data_tx_valid();
     }
 
@@ -525,7 +534,7 @@ impl USB {
     ///
     /// Resets the USB peripheral and activates it.
     /// Does not enable any endpoints; call `usb_reset()` after `power_on_reset()`.
-    fn power_on_reset(&self) {
+    fn power_on_reset(&mut self) {
         // Activate analog power supply while transceiver is in reset
         modify_reg!(usb, self.usb, CNTR, PDWN: Disabled, FRES: Reset);
         // Wait t_STARTUP (1µs)
@@ -538,7 +547,7 @@ impl USB {
         self.write_btable();
         // Set buffer table to start at BTABLE.
         // We write the entire register to avoid dealing with the shifted-by-3 field.
-        unsafe { write_reg!(usb, self.usb, BTABLE, (&BTABLE as *const _ as u32) - USB_SRAM) };
+        write_reg!(usb, self.usb, BTABLE, (self.btable as *const _ as u32) - USB_SRAM);
         // Clear ISTR
         write_reg!(usb, self.usb, ISTR, 0);
         // Enable reset masks
@@ -547,11 +556,9 @@ impl USB {
     }
 
     /// Write the BTABLE descriptors with the addresses and sizes of the available buffers
-    fn write_btable(&self) {
-        unsafe {
-            BTABLE[0].write(&EP0BUF);
-            BTABLE[1].write(&EP1BUF);
-        }
+    fn write_btable(&mut self) {
+        self.btable[0].write(&self.ep0buf);
+        self.btable[1].write(&self.ep1buf);
     }
 
     /// Put device into USB_RESET state
