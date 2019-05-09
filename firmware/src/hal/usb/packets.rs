@@ -152,7 +152,7 @@ impl SetupPID {
 
     #[allow(unused)]
     pub fn setup_direction(&self) -> SetupDirection {
-        match self.bmRequestType & (1 << 7) >> 5 {
+        match (self.bmRequestType & (0b1 << 7)) >> 5 {
             0 => SetupDirection::HostToDevice,
             1 => SetupDirection::DeviceToHost,
             _ => unreachable!(),
@@ -160,7 +160,7 @@ impl SetupPID {
     }
 
     pub fn setup_type(&self) -> SetupType {
-        match self.bmRequestType & (0b11 << 5) >> 5 {
+        match (self.bmRequestType & (0b11 << 5)) >> 5 {
             0 => SetupType::Standard,
             1 => SetupType::Class,
             2 => SetupType::Vendor,

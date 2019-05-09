@@ -61,11 +61,10 @@ impl<'a> App<'a> {
     pub fn poll(&mut self) {
         if self.nvic.usb_pending() {
             // Handle USB interrupts
-            self.usb.interrupt();
-            self.nvic.unpend_usb();
-            if let Some(req) = self.usb.get_request() {
+            if let Some(req) = self.usb.interrupt() {
                 self.process_request(req);
             }
+            self.nvic.unpend_usb();
         } else if self.nvic.spi1_pending() {
             // Handle SPI interrupts
             self.spi.interrupt();
@@ -87,7 +86,10 @@ impl<'a> App<'a> {
                 Mode::Flash => self.pins.flash_mode(),
                 Mode::FPGA => self.pins.fpga_mode(),
             },
-            Request::Transmit(_) => {},
+            Request::Transmit(data) => {
+                self.pins.led.toggle();
+                self.usb.reply_data(&data);
+            }
             Request::GetTPwr => self.usb.reply_tpwr(self.pins.tpwr_det.get_state()),
             Request::Bootload => hal::bootload::bootload(),
         };

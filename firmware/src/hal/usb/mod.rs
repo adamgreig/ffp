@@ -15,8 +15,8 @@ use crate::app::{PinState, Mode, Request};
 pub struct USB {
     usb: usb::Instance,
     pending_address: Option<u16>,
-    pending_bootload: bool,
     pending_request: Option<Request>,
+    pending_request_ready: bool,
 }
 
 impl USB {
@@ -25,8 +25,8 @@ impl USB {
         USB {
             usb,
             pending_address: None,
-            pending_bootload: false,
-            pending_request: None
+            pending_request: None,
+            pending_request_ready: false,
         }
     }
 
@@ -40,7 +40,10 @@ impl USB {
     /// Process a pending USB interrupt.
     ///
     /// Call this function when a USB interrupt occurs.
-    pub fn interrupt(&mut self) {
+    ///
+    /// Returns Some(Request) if a new request has been received
+    /// from the host.
+    pub fn interrupt(&mut self) -> Option<Request> {
         let (ctr, susp, wkup, reset, ep_id) =
             read_reg!(usb, self.usb, ISTR, CTR, SUSP, WKUP, RESET, EP_ID);
 
@@ -69,30 +72,34 @@ impl USB {
             modify_reg!(usb, self.usb, CNTR, FSUSP: 0);
             write_reg!(usb, self.usb, ISTR, CTR: 1, SUSP: 1, WKUP: 0, RESET: 1);
         }
-    }
 
-    /// Get any pending request arising from most recent `interrupt()` call
-    pub fn get_request(&mut self) -> Option<Request> {
-        if let Some(req) = self.pending_request {
-            self.pending_request = None;
-            Some(req)
-        } else {
-            None
-        }
+        self.get_request()
     }
 
     /// Transmit the current tpwr state in response to a recent GetTPwr request
     pub fn reply_tpwr(&self, tpwr: PinState) {
-        let data = match tpwr {
-            PinState::Low => [PinState::Low as u8; 1],
-            PinState::High => [PinState::High as u8; 1],
-        };
+        let data = [tpwr as u8, 0];
         self.control_tx_slice(&data[..]);
     }
 
     /// Transmit a given slice of data out the bulk endpoint
     pub fn reply_data(&self, data: &[u8]) {
         self.data_tx_slice(data);
+    }
+
+    /// Get any pending request, updating pending_request_ready as appropriate
+    fn get_request(&mut self) -> Option<Request> {
+        if let Some(req) = self.pending_request {
+            if self.pending_request_ready {
+                self.pending_request_ready = false;
+                self.pending_request = None;
+                Some(req)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     /// Process a communication-completed event on EP0
@@ -141,12 +148,16 @@ impl USB {
         }
 
         // If we had a pending bootload, we've now sent the ACK, so
-        // it's safe to detach from the bus and alert the application
-        // that we should reset to bootloader.
-        // go ahead and reset the device.
-        if self.pending_bootload {
+        // it's safe to detach from the bus. The application will
+        // reset the device when it next calls `get_request()`.
+        if let Some(Request::Bootload) = self.pending_request {
             self.detach();
-            self.pending_request = Some(Request::Bootload);
+        }
+
+        // Once transmission is complete we can release any pending requests
+        // to the application.
+        if self.pending_request.is_some() {
+            self.pending_request_ready = true;
         }
     }
 
@@ -160,11 +171,11 @@ impl USB {
         self.control_rx_valid();
     }
 
-    /// Resume reception of new packets
+    /// Resume reception of new control packets
     fn control_rx_valid(&self) {
         // Indicate we're ready to receive again by setting STAT_RX to VALID
-        let stat_rx = read_reg!(usb, self.usb, EP0R, STAT_RX);
-        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
+        let (stat_rx, ep_type, ea) = read_reg!(usb, self.usb, EP0R, STAT_RX, EP_TYPE, EA);
+        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 1, EA: ea,
                    STAT_RX: Self::stat_valid(stat_rx));
     }
 
@@ -191,8 +202,9 @@ impl USB {
     /// and will be reset by hardware to NAK on both directions upon
     /// the next SETUP reception.
     fn control_stall(&self) {
-        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP0R, STAT_TX, STAT_RX);
-        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
+        let (stat_tx, stat_rx, ep_type, ea) =
+            read_reg!(usb, self.usb, EP0R, STAT_TX, STAT_RX, EP_TYPE, EA);
+        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 1, EA: ea,
                    STAT_TX: Self::stat_stall(stat_tx), STAT_RX: Self::stat_stall(stat_rx));
     }
 
@@ -380,7 +392,7 @@ impl USB {
                 match setup.wValue {
                     0 => self.pending_request = Some(Request::SetCS(PinState::Low)),
                     1 => self.pending_request = Some(Request::SetCS(PinState::High)),
-                    _ => {},
+                    _ => return self.control_stall(),
                 };
                 self.control_tx_ack();
             },
@@ -389,7 +401,7 @@ impl USB {
                 match setup.wValue {
                     0 => self.pending_request = Some(Request::SetFPGA(PinState::Low)),
                     1 => self.pending_request = Some(Request::SetFPGA(PinState::High)),
-                    _ => {},
+                    _ => return self.control_stall(),
                 };
                 self.control_tx_ack();
             },
@@ -399,7 +411,7 @@ impl USB {
                     0 => self.pending_request = Some(Request::SetMode(Mode::HighImpedance)),
                     1 => self.pending_request = Some(Request::SetMode(Mode::Flash)),
                     2 => self.pending_request = Some(Request::SetMode(Mode::FPGA)),
-                    _ => {},
+                    _ => return self.control_stall(),
                 };
                 self.control_tx_ack();
             },
@@ -408,7 +420,7 @@ impl USB {
                 match setup.wValue {
                     0 => self.pending_request = Some(Request::SetTPwr(PinState::Low)),
                     1 => self.pending_request = Some(Request::SetTPwr(PinState::High)),
-                    _ => {},
+                    _ => return self.control_stall(),
                 };
                 self.control_tx_ack();
             },
@@ -417,23 +429,21 @@ impl USB {
                 match setup.wValue {
                     0 => self.pending_request = Some(Request::SetLED(PinState::Low)),
                     1 => self.pending_request = Some(Request::SetLED(PinState::High)),
-                    _ => {},
+                    _ => return self.control_stall(),
                 };
                 self.control_tx_ack();
             }
 
             Some(VendorRequest::GetTPwr) => {
                 self.pending_request = Some(Request::GetTPwr);
-                // We don't ACK this, instead we wait for the application to
-                // give us the TPwr state and then transmit that.
+                // We don't ACK this, instead we immediately release the
+                // pending request to the application which will call
+                // `reply_tpwr()` with the TPwr state, and we transmit that.
+                self.pending_request_ready = true;
             },
 
             Some(VendorRequest::Bootload) => {
-                // Instead of setting pending_request here, we store the pend
-                // and wait until we finish transmitting the ACK before
-                // returning the request to the application, which will
-                // immediately reset the device to bootloader.
-                self.pending_bootload = true;
+                self.pending_request = Some(Request::Bootload);
                 self.control_tx_ack();
             },
 
@@ -445,7 +455,12 @@ impl USB {
     }
 
     /// Process transmission complete on EP1
-    fn process_data_tx(&self) {
+    fn process_data_tx(&mut self) {
+        // If we've got a pending request, we must have just sent an ACK,
+        // so release the pending request to the application.
+        if self.pending_request.is_some() {
+            self.pending_request_ready = true;
+        }
     }
 
     /// Process reception complete on EP1
@@ -454,10 +469,17 @@ impl USB {
         let mut data = [0u8; 64];
         unsafe { EP1BUF.read_rx(&BTABLE[1], &mut data); }
         self.pending_request = Some(Request::Transmit(data));
+        self.pending_request_ready = true;
 
         // Indicate we're ready to receive again
-        let stat_rx = read_reg!(usb, self.usb, EP1R, STAT_RX);
-        write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: Bulk, CTR_TX: 1, EA: 1,
+        self.data_rx_valid();
+    }
+
+    /// Resume reception of new data packets
+    fn data_rx_valid(&self) {
+        // Indicate we're ready to receive again by setting STAT_RX to VALID
+        let (stat_rx, ep_type, ea) = read_reg!(usb, self.usb, EP1R, STAT_RX, EP_TYPE, EA);
+        write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 1, EA: ea,
                    STAT_RX: Self::stat_valid(stat_rx));
     }
 
@@ -465,7 +487,7 @@ impl USB {
         assert!(data.len() <= 64);
         unsafe {
             EP1BUF.write_tx(data);
-            BTABLE[0].tx_count(data.len());
+            BTABLE[1].tx_count(data.len());
         }
         self.data_tx_valid();
     }
@@ -607,8 +629,6 @@ impl USB {
 
         // Ensure all other endpoints are disabled by writing their current
         // values of STAT_TX/STAT_RX, setting them to 00 (disabled)
-        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP1R, STAT_TX, STAT_RX);
-        write_reg!(usb, self.usb, EP1R, STAT_TX: stat_tx, STAT_RX: stat_rx);
         let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP2R, STAT_TX, STAT_RX);
         write_reg!(usb, self.usb, EP2R, STAT_TX: stat_tx, STAT_RX: stat_rx);
         let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP3R, STAT_TX, STAT_RX);

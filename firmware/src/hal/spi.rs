@@ -18,4 +18,7 @@ impl SPI {
 
     pub fn interrupt(&self) {
     }
+
+    pub fn transmit(&self, _data: [u8; 64]) {
+    }
 }
