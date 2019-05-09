@@ -9,7 +9,7 @@ use packets::*;
 use buffers::*;
 use descriptors::*;
 
-use super::{gpio, bootload};
+use super::bootload;
 
 /// USB stack interface
 pub struct USB {
@@ -41,15 +41,9 @@ impl USB {
         } else if ctr == 1 {
             self.ctr(ep_id as u8);
         } else if susp == 1 {
-            // Turn off status LED
-            let gpioa = unsafe { gpio::GPIO::new(stm32ral::gpio::GPIOA::steal()) };
-            gpioa.clear(2);
             // Put USB peripheral into suspend and low-power mode
             modify_reg!(usb, self.usb, CNTR, FSUSP: Suspend, LPMODE: Enabled);
         } else if wkup == 1 {
-            // Turn back on status LED
-            let gpioa = unsafe { gpio::GPIO::new(stm32ral::gpio::GPIOA::steal()) };
-            gpioa.set(2);
             // Bring USB peripheral out of suspend
             modify_reg!(usb, self.usb, CNTR, FSUSP: 0);
         }
@@ -333,12 +327,6 @@ impl USB {
     fn process_vendor_request(&mut self, setup: &SetupPID) {
         match VendorRequest::from_u8(setup.bRequest) {
             Some(VendorRequest::SetCS) => {
-                let gpioa = unsafe { gpio::GPIO::new(stm32ral::gpio::GPIOA::steal()) };
-                if setup.wValue == 1 {
-                    gpioa.set(2);
-                } else {
-                    gpioa.clear(2);
-                }
                 self.control_tx_ack();
             },
 
