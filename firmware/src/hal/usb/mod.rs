@@ -76,6 +76,11 @@ impl USB {
             // Put USB peripheral into suspend and low-power mode
             modify_reg!(usb, self.usb, CNTR, FSUSP: Suspend, LPMODE: Enabled);
             write_reg!(usb, self.usb, ISTR, CTR: 1, SUSP: 0, WKUP: 1, RESET: 1);
+
+            // Let the application know we've entered SUSPEND so it
+            // can take appropriate action to reduce power consumption
+            self.pending_request = Some(Request::Suspend);
+            self.pending_request_ready = true;
         }
 
         if wkup == 1 {

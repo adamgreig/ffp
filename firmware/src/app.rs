@@ -23,6 +23,7 @@ pub enum Request {
     Transmit([u8; 64]),
     GetTPwr,
     Bootload,
+    Suspend,
 }
 
 pub struct App<'a> {
@@ -86,12 +87,14 @@ impl<'a> App<'a> {
                 Mode::Flash => self.pins.flash_mode(),
                 Mode::FPGA => self.pins.fpga_mode(),
             },
-            Request::Transmit(data) => {
-                self.pins.led.toggle();
-                self.usb.reply_data(&data);
-            }
+            Request::Transmit(data) => self.usb.reply_data(&data),
             Request::GetTPwr => self.usb.reply_tpwr(self.pins.tpwr_det.get_state()),
             Request::Bootload => hal::bootload::bootload(),
+            Request::Suspend => {
+                self.pins.high_impedance_mode();
+                self.pins.led.set_low();
+                self.pins.tpwr_en.set_low();
+            },
         };
     }
 }
