@@ -1,3 +1,4 @@
+pub mod flash;
 pub mod rcc;
 pub mod nvic;
 pub mod gpio;

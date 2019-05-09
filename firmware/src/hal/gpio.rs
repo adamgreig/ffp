@@ -1,5 +1,6 @@
 use stm32ral::gpio;
 use stm32ral::{read_reg, write_reg, modify_reg};
+use crate::app::PinState;
 
 pub struct GPIO {
     p: gpio::Instance,
@@ -8,6 +9,19 @@ pub struct GPIO {
 pub struct Pin<'a> {
     n: u8,
     port: &'a GPIO,
+}
+
+pub struct Pins<'a> {
+    pub led: Pin<'a>,
+    pub cs: Pin<'a>,
+    pub fpga_rst: Pin<'a>,
+    pub sck: Pin<'a>,
+    pub flash_so: Pin<'a>,
+    pub flash_si: Pin<'a>,
+    pub fpga_so: Pin<'a>,
+    pub fpga_si: Pin<'a>,
+    pub tpwr_det: Pin<'a>,
+    pub tpwr_en: Pin<'a>,
 }
 
 impl<'a> GPIO {
@@ -20,13 +34,13 @@ impl<'a> GPIO {
         Pin { n, port: self }
     }
 
-    pub fn set(&'a self, n: u8) -> &Self {
+    pub fn set_high(&'a self, n: u8) -> &Self {
         assert!(n < 16);
         write_reg!(gpio, self.p, BSRR, 1 << n);
         self
     }
 
-    pub fn clear(&'a self, n: u8) -> &Self {
+    pub fn set_low(&'a self, n: u8) -> &Self {
         assert!(n < 16);
         write_reg!(gpio, self.p, BRR, 1 << n);
         self
@@ -36,9 +50,9 @@ impl<'a> GPIO {
         assert!(n < 16);
         let pin = (read_reg!(gpio, self.p, IDR) >> n) & 1;
         if pin == 1 {
-            self.clear(n)
+            self.set_low(n)
         } else {
-            self.set(n)
+            self.set_high(n)
         }
     }
 
@@ -144,17 +158,40 @@ impl<'a> GPIO {
     pub fn set_pull_down(&'a self, n: u8) -> &Self {
         self.set_pull(n, gpio::PUPDR::PUPDR0::RW::PullDown)
     }
+
+    pub fn get_idr(&'a self) -> u32 {
+        read_reg!(gpio, self.p, IDR)
+    }
+
+    pub fn get_pin_idr(&'a self, n: u8) -> u32 {
+        (self.get_idr() & (1 << n)) >> n
+    }
 }
 
 impl<'a> Pin<'a> {
-    pub fn set(&self) -> &Self {
-        self.port.set(self.n);
+    pub fn set_high(&self) -> &Self {
+        self.port.set_high(self.n);
         self
     }
 
-    pub fn clear(&self) -> &Self {
-        self.port.clear(self.n);
+    pub fn set_low(&self) -> &Self {
+        self.port.set_low(self.n);
         self
+    }
+
+    pub fn set_state(&self, state: PinState) {
+        match state {
+            PinState::Low => self.set_low(),
+            PinState::High => self.set_high(),
+        };
+    }
+
+    pub fn get_state(&self) -> PinState {
+        match self.port.get_pin_idr(self.n) {
+            0 => PinState::Low,
+            1 => PinState::High,
+            _ => unreachable!(),
+        }
     }
 
     pub fn toggle(&'a self) -> &Self {
@@ -230,5 +267,107 @@ impl<'a> Pin<'a> {
     pub fn set_pull_down(&'a self) -> &Self {
         self.port.set_pull_down(self.n);
         self
+    }
+}
+
+impl<'a> Pins<'a> {
+    /// Configure I/O pins
+    pub fn setup(&self) {
+        // Push-pull output to LED (active high).
+        self.led
+            .set_low()
+            .set_otype_pushpull()
+            .set_ospeed_low()
+            .set_mode_output();
+
+        // Open-drain output to FPGA and Flash CS (active low).
+        self.cs
+            .set_high()
+            .set_otype_opendrain()
+            .set_ospeed_high()
+            .set_mode_output();
+
+        // Open-drain output to FPGA reset line (active low).
+        self.fpga_rst
+            .set_high()
+            .set_otype_opendrain()
+            .set_ospeed_high()
+            .set_mode_output();
+
+        // Push-pull output to SPI SCK. Starts high-impedance.
+        self.sck
+            .set_af(0)
+            .set_otype_pushpull()
+            .set_ospeed_veryhigh()
+            .set_mode_input();
+
+        // Push-pull SPI MISO to Flash (FPGA MOSI). Starts high-impedance.
+        self.flash_so
+            .set_af(0)
+            .set_otype_pushpull()
+            .set_ospeed_veryhigh()
+            .set_mode_input();
+
+        // Push-pull SPI MOSI to Flash (FPGA MISO). Starts high-impedance.
+        self.flash_si
+            .set_af(0)
+            .set_otype_pushpull()
+            .set_ospeed_veryhigh()
+            .set_mode_input();
+
+        // Push-pull SPI MISO to FPGA (Flash MOSI). Starts high-impedance.
+        self.fpga_so
+            .set_af(0)
+            .set_otype_pushpull()
+            .set_ospeed_veryhigh()
+            .set_mode_input();
+
+        // Push-pull SPI MOSI to FPGA (Flash MISO). Starts high-impedance.
+        self.fpga_si
+            .set_mode_input()
+            .set_af(0)
+            .set_otype_pushpull()
+            .set_ospeed_veryhigh();
+
+        // Input from target power rail.
+        self.tpwr_det
+            .set_mode_input();
+
+        // Push-pull output drives target power switch (active high).
+        self.tpwr_en
+            .set_low()
+            .set_mode_output()
+            .set_otype_pushpull()
+            .set_ospeed_low();
+    }
+
+    /// Place SPI pins into FPGA-programming mode
+    pub fn fpga_mode(&self) {
+        self.cs.set_mode_output();
+        self.sck.set_mode_alternate();
+        self.flash_so.set_mode_input();
+        self.flash_si.set_mode_input();
+        self.fpga_so.set_mode_alternate();
+        self.fpga_si.set_mode_alternate();
+    }
+
+    /// Place SPI pins into flash-programming mode
+    pub fn flash_mode(&self) {
+        self.cs.set_mode_output();
+        self.sck.set_mode_alternate();
+        self.fpga_so.set_mode_input();
+        self.fpga_si.set_mode_input();
+        self.flash_so.set_mode_alternate();
+        self.flash_si.set_mode_alternate();
+    }
+
+    /// Place SPI pins into high-impedance mode
+    pub fn high_impedance_mode(&self) {
+        self.cs.set_mode_input();
+        self.sck.set_mode_input();
+        self.flash_so.set_mode_input();
+        self.flash_si.set_mode_input();
+        self.fpga_so.set_mode_input();
+        self.fpga_si.set_mode_input();
     }
 }

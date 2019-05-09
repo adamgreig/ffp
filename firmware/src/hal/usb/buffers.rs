@@ -59,6 +59,19 @@ impl EPBuf {
             unsafe { core::ptr::write_volatile(&mut self.tx[idx], data_u16[idx]) };
         }
     }
+
+    /// Copy rx buffer into `data`
+    pub fn read_rx(&self, btable: &BTableRow, data: &mut [u8]) {
+        let rx_len = btable.rx_count();
+        assert!(data.len() >= rx_len);
+        for idx in 0..rx_len/2 {
+            unsafe {
+                let word = core::ptr::read_volatile(&self.rx[idx]);
+                data[idx*2  ] = (word & 0xFF) as u8;
+                data[idx*2+1] = (word >>   8) as u8;
+            }
+        }
+    }
 }
 
 impl BTableRow {
@@ -73,8 +86,15 @@ impl BTableRow {
     }
 
     /// Get the current COUNT_RX value
-    #[allow(unused)]
     pub fn rx_count(&self) -> usize {
         (self.COUNT_RX & 0x3FF) as usize
+    }
+
+    /// Writes buffer location and size to this BTableRow
+    pub fn write(&mut self, buf: &EPBuf) {
+        self.ADDR_TX = (&buf.tx as *const _ as u32 - USB_SRAM) as u16;
+        self.ADDR_RX = (&buf.rx as *const _ as u32 - USB_SRAM) as u16;
+        self.COUNT_TX = 0;
+        self.COUNT_RX = (1<<15) | (64/32) << 10;
     }
 }

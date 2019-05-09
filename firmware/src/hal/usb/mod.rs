@@ -9,19 +9,25 @@ use packets::*;
 use buffers::*;
 use descriptors::*;
 
-use super::bootload;
+use crate::app::{PinState, Mode, Request};
 
 /// USB stack interface
 pub struct USB {
     usb: usb::Instance,
     pending_address: Option<u16>,
     pending_bootload: bool,
+    pending_request: Option<Request>,
 }
 
 impl USB {
     /// Create a new USB object from the peripheral instance
     pub fn new(usb: usb::Instance) -> Self {
-        USB { usb, pending_address: None, pending_bootload: false }
+        USB {
+            usb,
+            pending_address: None,
+            pending_bootload: false,
+            pending_request: None
+        }
     }
 
     /// Initialise the USB peripheral ready to start processing packets
@@ -31,65 +37,97 @@ impl USB {
         self.attach();
     }
 
+    /// Process a pending USB interrupt.
+    ///
     /// Call this function when a USB interrupt occurs.
     pub fn interrupt(&mut self) {
         let (ctr, susp, wkup, reset, ep_id) =
             read_reg!(usb, self.usb, ISTR, CTR, SUSP, WKUP, RESET, EP_ID);
-        write_reg!(usb, self.usb, ISTR, 0);
+
         if reset == 1 {
             self.usb_reset();
-        } else if ctr == 1 {
-            self.ctr(ep_id as u8);
-        } else if susp == 1 {
+            write_reg!(usb, self.usb, ISTR, CTR: 1, SUSP: 1, WKUP: 1, RESET: 0);
+        }
+
+        if ctr == 1 {
+            match ep_id {
+                0 => self.process_control_ctr(),
+                1 => self.process_data_ctr(),
+                _ => {},
+            }
+            write_reg!(usb, self.usb, ISTR, CTR: 0, SUSP: 1, WKUP: 1, RESET: 1);
+        }
+
+        if susp == 1 {
             // Put USB peripheral into suspend and low-power mode
             modify_reg!(usb, self.usb, CNTR, FSUSP: Suspend, LPMODE: Enabled);
-        } else if wkup == 1 {
+            write_reg!(usb, self.usb, ISTR, CTR: 1, SUSP: 0, WKUP: 1, RESET: 1);
+        }
+
+        if wkup == 1 {
             // Bring USB peripheral out of suspend
             modify_reg!(usb, self.usb, CNTR, FSUSP: 0);
+            write_reg!(usb, self.usb, ISTR, CTR: 1, SUSP: 1, WKUP: 0, RESET: 1);
         }
     }
 
-    /// Process a communication-completed event by EP `ep_id`
-    fn ctr(&mut self, ep_id: u8) {
-        match ep_id {
-            // Handle events on control EP0
-            0 => {
-                let (ctr_tx, ctr_rx, ep_type, ea) =
-                    read_reg!(usb, self.usb, EP0R, CTR_TX, CTR_RX, EP_TYPE, EA);
-                if ctr_tx == 1 {
-                    self.process_control_tx();
-                    // Clear CTR_TX
-                    write_reg!(usb, self.usb, EP0R,
-                               CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 0, EA: ea);
-                }
-                if ctr_rx == 1 {
-                    self.process_control_rx();
-                    // Clear CTR_RX
-                    write_reg!(usb, self.usb, EP0R,
-                               CTR_RX: 0, EP_TYPE: ep_type, CTR_TX: 1, EA: ea);
-                }
-            },
+    /// Get any pending request arising from most recent `interrupt()` call
+    pub fn get_request(&mut self) -> Option<Request> {
+        if let Some(req) = self.pending_request {
+            self.pending_request = None;
+            Some(req)
+        } else {
+            None
+        }
+    }
 
-            // Handle events on data EP1
-            1 => {
-                let (ctr_tx, ctr_rx, ep_type, ea) =
-                    read_reg!(usb, self.usb, EP1R, CTR_TX, CTR_RX, EP_TYPE, EA);
-                if ctr_tx == 1 {
-                    self.process_data_tx();
-                    // Clear CTR_TX
-                    write_reg!(usb, self.usb, EP1R,
-                               CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 0, EA: ea);
-                }
-                if ctr_rx == 1 {
-                    self.process_data_rx();
-                    // Clear CTR_RX
-                    write_reg!(usb, self.usb, EP1R,
-                               CTR_RX: 0, EP_TYPE: ep_type, CTR_TX: 1, EA: ea);
-                }
-            },
+    /// Transmit the current tpwr state in response to a recent GetTPwr request
+    pub fn reply_tpwr(&self, tpwr: PinState) {
+        let data = match tpwr {
+            PinState::Low => [PinState::Low as u8; 1],
+            PinState::High => [PinState::High as u8; 1],
+        };
+        self.control_tx_slice(&data[..]);
+    }
 
-            // Ignore any other EPs
-            _ => (),
+    /// Transmit a given slice of data out the bulk endpoint
+    pub fn reply_data(&self, data: &[u8]) {
+        self.data_tx_slice(data);
+    }
+
+    /// Process a communication-completed event on EP0
+    fn process_control_ctr(&mut self) {
+        let (ctr_tx, ctr_rx, ep_type, ea) =
+            read_reg!(usb, self.usb, EP0R, CTR_TX, CTR_RX, EP_TYPE, EA);
+        if ctr_tx == 1 {
+            self.process_control_tx();
+            // Clear CTR_TX
+            write_reg!(usb, self.usb, EP0R,
+                       CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 0, EA: ea);
+        }
+        if ctr_rx == 1 {
+            self.process_control_rx();
+            // Clear CTR_RX
+            write_reg!(usb, self.usb, EP0R,
+                       CTR_RX: 0, EP_TYPE: ep_type, CTR_TX: 1, EA: ea);
+        }
+    }
+
+    /// Process a communication-completed event on EP1
+    fn process_data_ctr(&mut self) {
+        let (ctr_tx, ctr_rx, ep_type, ea) =
+            read_reg!(usb, self.usb, EP1R, CTR_TX, CTR_RX, EP_TYPE, EA);
+        if ctr_tx == 1 {
+            self.process_data_tx();
+            // Clear CTR_TX
+            write_reg!(usb, self.usb, EP1R,
+                       CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 0, EA: ea);
+        }
+        if ctr_rx == 1 {
+            self.process_data_rx();
+            // Clear CTR_RX
+            write_reg!(usb, self.usb, EP1R,
+                       CTR_RX: 0, EP_TYPE: ep_type, CTR_TX: 1, EA: ea);
         }
     }
 
@@ -97,19 +135,18 @@ impl USB {
     fn process_control_tx(&mut self) {
         // If we had a pending address change, we must have just sent the STATUS ACK,
         // so apply the new address now and clear the pending change.
-        match self.pending_address {
-            Some(addr) => {
-                self.set_address(addr);
-                self.pending_address = None;
-            },
-            None => (),
+        if let Some(addr) = self.pending_address {
+            self.set_address(addr);
+            self.pending_address = None;
         }
 
         // If we had a pending bootload, we've now sent the ACK, so
+        // it's safe to detach from the bus and alert the application
+        // that we should reset to bootloader.
         // go ahead and reset the device.
         if self.pending_bootload {
             self.detach();
-            bootload::bootload();
+            self.pending_request = Some(Request::Bootload);
         }
     }
 
@@ -120,21 +157,31 @@ impl USB {
             self.process_setup_rx();
         }
         // Resume reception on EP0
-        self.control_rx_ack();
+        self.control_rx_valid();
     }
 
     /// Resume reception of new packets
-    fn control_rx_ack(&self) {
+    fn control_rx_valid(&self) {
         // Indicate we're ready to receive again by setting STAT_RX to VALID
         let stat_rx = read_reg!(usb, self.usb, EP0R, STAT_RX);
         write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
                    STAT_RX: Self::stat_valid(stat_rx));
     }
 
+    /// Return the given slice as data
+    fn control_tx_slice(&self, data: &[u8]) {
+        assert!(data.len() <= 64);
+        unsafe {
+            EP0BUF.write_tx(data);
+            BTABLE[0].tx_count(data.len());
+        }
+        self.control_tx_valid();
+    }
+
     /// Indicate a packet has been loaded into the buffer and is ready for transmission
     fn control_tx_valid(&self) {
-        let stat_tx = read_reg!(usb, self.usb, EP0R, STAT_TX);
-        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: Control, CTR_TX: 1, EA: 0,
+        let (stat_tx, ep_type, ea) = read_reg!(usb, self.usb, EP0R, STAT_TX, EP_TYPE, EA);
+        write_reg!(usb, self.usb, EP0R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 1, EA: ea,
                    STAT_TX: Self::stat_valid(stat_tx));
     }
 
@@ -170,11 +217,7 @@ impl USB {
                 Some(StandardRequest::GetStatus) => {
                     // Reply with dummy status 0x0000
                     let data = [0u8, 0u8];
-                    unsafe {
-                        EP0BUF.write_tx(&data[..]);
-                        BTABLE[0].tx_count(data.len());
-                    }
-                    self.control_tx_valid();
+                    self.control_tx_slice(&data[..]);
                 },
                 Some(StandardRequest::SetAddress) => {
                     // Store new address for application after sending STATUS back
@@ -209,144 +252,187 @@ impl USB {
     /// Handle a GET_DESCRIPTOR request
     fn process_get_descriptor(&self, w_length: u16, descriptor_type: u8, descriptor_index: u8) {
         match DescriptorType::from_u8(descriptor_type) {
-            Some(DescriptorType::Device) => {
-                // Send DEVICE_DESCRIPTOR
-                let n = u16::min(DEVICE_DESCRIPTOR.bLength as u16, w_length) as usize;
-                unsafe {
-                    let data = core::slice::from_raw_parts(
-                        &DEVICE_DESCRIPTOR as *const _ as *const u8, n);
-                    EP0BUF.write_tx(data);
-                    BTABLE[0].tx_count(n);
-                }
-                self.control_tx_valid();
-            },
+            Some(DescriptorType::Device) =>
+                self.process_get_device_descriptor(w_length),
+            Some(DescriptorType::Configuration) =>
+                self.process_get_configuration_descriptor(w_length),
 
-            Some(DescriptorType::Configuration) => {
-                // Send CONFIGURATION_DESCRIPTOR, INTERFACE_DESCRIPTOR,
-                // and all ENDPOINT_DESCRIPTORS
-
-                // We need to first copy all the descriptors into a single buffer,
-                // as they are not u16-aligned.
-                let mut buf = [0u8; 64];
-
-                // Copy CONFIGURATION_DESCRIPTOR into buf
-                let n1 = CONFIGURATION_DESCRIPTOR.bLength as usize;
-                let data1 = unsafe { core::slice::from_raw_parts(
-                    &CONFIGURATION_DESCRIPTOR as *const _ as *const u8, n1)};
-                buf[0..n1].copy_from_slice(data1);
-
-                // Copy INTERFACE_DESCRIPTOR into buf
-                let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
-                let data2 = unsafe { core::slice::from_raw_parts(
-                    &INTERFACE_DESCRIPTOR as *const _ as *const u8, n2)};
-                buf[n1..n1+n2].copy_from_slice(data2);
-
-                // Copy all ENDPOINT_DESCRIPTORS into buf
-                let mut n = n1+n2;
-                for ep in ENDPOINT_DESCRIPTORS.iter() {
-                    let len = ep.bLength as usize;
-                    let data = unsafe { core::slice::from_raw_parts(
-                        ep as *const _ as *const u8, len)};
-                    buf[n..n+len].copy_from_slice(data);
-                    n += len;
-                }
-
-                // Only send as much data as was requested
-                let n = usize::min(n, w_length as usize);
-
-                // Copy buf into the actual endpoint buffer
-                unsafe {
-                    EP0BUF.write_tx(&buf[..n]);
-                    BTABLE[0].tx_count(n);
-                }
-
-                // Set up transfer
-                self.control_tx_valid();
-            },
-
-            Some(DescriptorType::String) => {
-                // Send a STRING descriptor
-                // First construct the descriptor dynamically; we do this so the
-                // UTF-8 encoded strings can be stored as statics instead of
-                // manually typing out the bytes for UTF-16.
-                let desc = match descriptor_index {
-                    // Special case string 0 which is a list of language IDs
-                    0 => {
-                        let mut desc = StringDescriptor {
-                            bLength: 2 + 2 * STRING_LANGS.len() as u8,
-                            bDescriptorType: DescriptorType::String as u8,
-                            bString: [0u8; 32],
-                        };
-                        // Pack the u16 language codes into the u8 array
-                        for (idx, lang) in STRING_LANGS.iter().enumerate() {
-                            desc.bString[idx*2] = (lang & 0xFF) as u8;
-                            desc.bString[idx*2+1] = (lang >> 8) as u8;
-                        }
-                        desc
-                    },
-
-                    // Handle all other strings
-                    idx if idx as usize <= STRINGS.len() => {
-                        let mut desc = StringDescriptor {
-                            bLength: 2 + 2 * STRINGS[idx as usize - 1].len() as u8,
-                            bDescriptorType: DescriptorType::String as u8,
-                            bString: [0u8; 32],
-                        };
-                        // Encode the &str to an iter of u16 and pack them
-                        let string = STRINGS[idx as usize - 1].encode_utf16();
-                        for (idx, cp) in string.enumerate() {
-                            desc.bString[idx*2] = (cp & 0xFF) as u8;
-                            desc.bString[idx*2+1] = (cp >> 8) as u8;
-                        }
-                        desc
-                    },
-
-                    // Reject any unknown indicies
-                    _ => {
-                        self.control_stall();
-                        return;
-                    }
-                };
-                let n = u16::min(desc.bLength as u16, w_length) as usize;
-                unsafe {
-                    let data = core::slice::from_raw_parts(&desc as *const _ as *const u8, n);
-                    EP0BUF.write_tx(data);
-                    BTABLE[0].tx_count(n);
-                }
-                self.control_tx_valid();
-            }
+            Some(DescriptorType::String) =>
+                self.process_get_string_descriptor(w_length, descriptor_index),
 
             // Ignore other descriptor types
+            _ => self.control_stall(),
+        }
+    }
+
+    /// Transmit DEVICE descriptor
+    fn process_get_device_descriptor(&self, w_length: u16) {
+        let n = u16::min(DEVICE_DESCRIPTOR.bLength as u16, w_length) as usize;
+        unsafe {
+            let data = core::slice::from_raw_parts(
+                &DEVICE_DESCRIPTOR as *const _ as *const u8, n);
+            EP0BUF.write_tx(data);
+            BTABLE[0].tx_count(n);
+        }
+        self.control_tx_valid();
+    }
+
+    /// Transmit CONFIGURATION, INTERFACE, and all ENDPOINT descriptors
+    fn process_get_configuration_descriptor(&self, w_length: u16) {
+        // We need to first copy all the descriptors into a single buffer,
+        // as they are not u16-aligned.
+        let mut buf = [0u8; 64];
+
+        // Copy CONFIGURATION_DESCRIPTOR into buf
+        let n1 = CONFIGURATION_DESCRIPTOR.bLength as usize;
+        let data1 = unsafe { core::slice::from_raw_parts(
+            &CONFIGURATION_DESCRIPTOR as *const _ as *const u8, n1)};
+        buf[0..n1].copy_from_slice(data1);
+
+        // Copy INTERFACE_DESCRIPTOR into buf
+        let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
+        let data2 = unsafe { core::slice::from_raw_parts(
+            &INTERFACE_DESCRIPTOR as *const _ as *const u8, n2)};
+        buf[n1..n1+n2].copy_from_slice(data2);
+
+        // Copy all ENDPOINT_DESCRIPTORS into buf
+        let mut n = n1+n2;
+        for ep in ENDPOINT_DESCRIPTORS.iter() {
+            let len = ep.bLength as usize;
+            let data = unsafe { core::slice::from_raw_parts(
+                ep as *const _ as *const u8, len)};
+            buf[n..n+len].copy_from_slice(data);
+            n += len;
+        }
+
+        // Only send as much data as was requested
+        let n = usize::min(n, w_length as usize);
+
+        // Copy buf into the actual endpoint buffer
+        unsafe {
+            EP0BUF.write_tx(&buf[..n]);
+            BTABLE[0].tx_count(n);
+        }
+
+        // Set up transfer
+        self.control_tx_valid();
+    }
+
+    /// Transmit STRING descriptor
+    fn process_get_string_descriptor(&self, w_length: u16, idx: u8) {
+        // Send a STRING descriptor
+        // First construct the descriptor dynamically; we do this so the
+        // UTF-8 encoded strings can be stored as statics instead of
+        // manually typing out the bytes for UTF-16.
+        let desc = match idx {
+            // Special case string 0 which is a list of language IDs
+            0 => {
+                let mut desc = StringDescriptor {
+                    bLength: 2 + 2 * STRING_LANGS.len() as u8,
+                    bDescriptorType: DescriptorType::String as u8,
+                    bString: [0u8; 32],
+                };
+                // Pack the u16 language codes into the u8 array
+                for (idx, lang) in STRING_LANGS.iter().enumerate() {
+                    desc.bString[idx*2] = (lang & 0xFF) as u8;
+                    desc.bString[idx*2+1] = (lang >> 8) as u8;
+                }
+                desc
+            },
+
+            // Handle all other strings
+            idx if idx as usize <= STRINGS.len() => {
+                let mut desc = StringDescriptor {
+                    bLength: 2 + 2 * STRINGS[idx as usize - 1].len() as u8,
+                    bDescriptorType: DescriptorType::String as u8,
+                    bString: [0u8; 32],
+                };
+                // Encode the &str to an iter of u16 and pack them
+                let string = STRINGS[idx as usize - 1].encode_utf16();
+                for (idx, cp) in string.enumerate() {
+                    desc.bString[idx*2] = (cp & 0xFF) as u8;
+                    desc.bString[idx*2+1] = (cp >> 8) as u8;
+                }
+                desc
+            },
+
+            // Reject any unknown indicies
             _ => {
                 self.control_stall();
-            },
+                return;
+            }
+        };
+
+        let n = u16::min(desc.bLength as u16, w_length) as usize;
+
+        unsafe {
+            let data = core::slice::from_raw_parts(&desc as *const _ as *const u8, n);
+            EP0BUF.write_tx(data);
+            BTABLE[0].tx_count(n);
         }
+        self.control_tx_valid();
     }
 
     /// Handle a vendor-specific request
     fn process_vendor_request(&mut self, setup: &SetupPID) {
         match VendorRequest::from_u8(setup.bRequest) {
             Some(VendorRequest::SetCS) => {
+                match setup.wValue {
+                    0 => self.pending_request = Some(Request::SetCS(PinState::Low)),
+                    1 => self.pending_request = Some(Request::SetCS(PinState::High)),
+                    _ => {},
+                };
                 self.control_tx_ack();
             },
 
             Some(VendorRequest::SetFPGA) => {
+                match setup.wValue {
+                    0 => self.pending_request = Some(Request::SetFPGA(PinState::Low)),
+                    1 => self.pending_request = Some(Request::SetFPGA(PinState::High)),
+                    _ => {},
+                };
                 self.control_tx_ack();
             },
 
             Some(VendorRequest::SetMode) => {
+                match setup.wValue {
+                    0 => self.pending_request = Some(Request::SetMode(Mode::HighImpedance)),
+                    1 => self.pending_request = Some(Request::SetMode(Mode::Flash)),
+                    2 => self.pending_request = Some(Request::SetMode(Mode::FPGA)),
+                    _ => {},
+                };
                 self.control_tx_ack();
             },
 
             Some(VendorRequest::SetTPwr) => {
+                match setup.wValue {
+                    0 => self.pending_request = Some(Request::SetTPwr(PinState::Low)),
+                    1 => self.pending_request = Some(Request::SetTPwr(PinState::High)),
+                    _ => {},
+                };
                 self.control_tx_ack();
             },
 
-            Some(VendorRequest::GetTPwr) => {
+            Some(VendorRequest::SetLED) => {
+                match setup.wValue {
+                    0 => self.pending_request = Some(Request::SetLED(PinState::Low)),
+                    1 => self.pending_request = Some(Request::SetLED(PinState::High)),
+                    _ => {},
+                };
                 self.control_tx_ack();
+            }
+
+            Some(VendorRequest::GetTPwr) => {
+                self.pending_request = Some(Request::GetTPwr);
+                // We don't ACK this, instead we wait for the application to
+                // give us the TPwr state and then transmit that.
             },
 
             Some(VendorRequest::Bootload) => {
+                // Instead of setting pending_request here, we store the pend
+                // and wait until we finish transmitting the ACK before
+                // returning the request to the application, which will
+                // immediately reset the device to bootloader.
                 self.pending_bootload = true;
                 self.control_tx_ack();
             },
@@ -363,11 +449,33 @@ impl USB {
     }
 
     /// Process reception complete on EP1
-    fn process_data_rx(&self) {
+    fn process_data_rx(&mut self) {
+        // Copy the received data
+        let mut data = [0u8; 64];
+        unsafe { EP1BUF.read_rx(&BTABLE[1], &mut data); }
+        self.pending_request = Some(Request::Transmit(data));
+
         // Indicate we're ready to receive again
         let stat_rx = read_reg!(usb, self.usb, EP1R, STAT_RX);
         write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: Bulk, CTR_TX: 1, EA: 1,
                    STAT_RX: Self::stat_valid(stat_rx));
+    }
+
+    fn data_tx_slice(&self, data: &[u8]) {
+        assert!(data.len() <= 64);
+        unsafe {
+            EP1BUF.write_tx(data);
+            BTABLE[0].tx_count(data.len());
+        }
+        self.data_tx_valid();
+    }
+
+    /// Indicate a packet has been loaded into the buffer and is ready for transmission
+    fn data_tx_valid(&self) {
+        let (stat_tx, ep_type, ea) = read_reg!(usb, self.usb, EP1R, STAT_TX, EP_TYPE, EA);
+        write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 1, EA: ea,
+                   STAT_TX: Self::stat_valid(stat_tx));
+
     }
 
     /// Return the bit pattern to write to a STAT field to update it to DISABLED
@@ -415,17 +523,11 @@ impl USB {
                     CTRM: Enabled, RESETM: Enabled, SUSPM: Enabled, WKUPM: Enabled);
     }
 
-    /// Write the BTABLE descriptor with the addresses and sizes of the available buffers
+    /// Write the BTABLE descriptors with the addresses and sizes of the available buffers
     fn write_btable(&self) {
         unsafe {
-            BTABLE[0].ADDR_TX = (&EP0BUF.tx as *const _ as u32 - USB_SRAM) as u16;
-            BTABLE[0].ADDR_RX = (&EP0BUF.rx as *const _ as u32 - USB_SRAM) as u16;
-            BTABLE[0].COUNT_TX = 0;
-            BTABLE[0].COUNT_RX = (1<<15) | (64 / 32) << 10;
-            BTABLE[1].ADDR_TX = (&EP1BUF.tx as *const _ as u32 - USB_SRAM) as u16;
-            BTABLE[1].ADDR_RX = (&EP1BUF.rx as *const _ as u32 - USB_SRAM) as u16;
-            BTABLE[1].COUNT_TX = 0;
-            BTABLE[1].COUNT_RX = (1<<15) | (256 / 32) << 10;
+            BTABLE[0].write(&EP0BUF);
+            BTABLE[1].write(&EP1BUF);
         }
     }
 

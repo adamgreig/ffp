@@ -11,7 +11,7 @@ import usb.core
 
 ID_VENDOR = 0x1209
 ID_PRODUCT = 0x0001
-BOOTLOAD_REQUEST = 6
+BOOTLOAD_REQUEST = 7
 
 
 def main():

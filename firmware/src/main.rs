@@ -5,70 +5,59 @@ extern crate panic_halt;
 use cortex_m_rt::{entry, pre_init};
 
 pub mod hal;
+pub mod app;
+
+use app::App;
 
 #[pre_init]
-unsafe fn preinit() {
-    // Check if we should jump to system bootloader
+unsafe fn pre_init() {
+    // Check if we should jump to system bootloader.
+    //
+    // When we receive the BOOTLOAD command over USB,
+    // we write a flag to a static and reset the chip,
+    // and `bootload::check()` will jump to the system
+    // memory bootloader if the flag is present.
+    //
+    // It must be called from pre_init as otherwise the
+    // flag is overwritten when statics are initialised.
     hal::bootload::check();
 }
 
 #[entry]
 fn main() -> ! {
-    // Configure clocks
+    // Obtain all required HAL instances
+    let flash = hal::flash::Flash::new(stm32ral::flash::Flash::take().unwrap());
     let rcc = hal::rcc::RCC::new(stm32ral::rcc::RCC::take().unwrap(),
                                  stm32ral::crs::CRS::take().unwrap());
-    rcc.setup();
-
-    // Configure interrupts
     let nvic = hal::nvic::NVIC::new(stm32ral::nvic::NVIC::take().unwrap(),
                                     stm32ral::scb::SCB::take().unwrap());
-    nvic.setup();
-
-    // Configure IO
     let gpioa = hal::gpio::GPIO::new(stm32ral::gpio::GPIOA::take().unwrap());
     let gpiob = hal::gpio::GPIO::new(stm32ral::gpio::GPIOB::take().unwrap());
-
-    let led = gpioa.pin(2);
-    let cs = gpioa.pin(3);
-    let fpga_rst = gpioa.pin(4);
-    let sck = gpioa.pin(5);
-    let flash_so = gpioa.pin(6);
-    let flash_si = gpioa.pin(7);
-    let fpga_so = gpiob.pin(4);
-    let fpga_si = gpiob.pin(5);
-    let tpwr_det = gpiob.pin(6);
-    let tpwr_en = gpiob.pin(7);
-
-    led.set_mode_output().set_otype_pushpull().set_ospeed_low().clear();
-    cs.set().set_otype_opendrain().set_ospeed_high().set_mode_output();
-    fpga_rst.set().set_otype_opendrain().set_ospeed_high().set_mode_output();
-    sck.set_mode_alternate().set_af(0).set_otype_pushpull().set_ospeed_veryhigh();
-    flash_so.set_mode_input().set_af(0).set_otype_pushpull().set_ospeed_veryhigh();
-    flash_si.set_mode_input().set_af(0).set_otype_pushpull().set_ospeed_veryhigh();
-    fpga_so.set_mode_input().set_af(0).set_otype_pushpull().set_ospeed_veryhigh();
-    fpga_si.set_mode_input().set_af(0).set_otype_pushpull().set_ospeed_veryhigh();
-    tpwr_det.set_mode_input();
-    tpwr_en.clear().set_mode_output().set_otype_pushpull().set_ospeed_low();
-
-    // Configure SPI
-    let spi = hal::spi::SPI::new(stm32ral::spi::SPI1::take().unwrap());
-    spi.setup();
-
-    // Configure USB
+    let mut spi = hal::spi::SPI::new(stm32ral::spi::SPI1::take().unwrap());
     let mut usb = hal::usb::USB::new(stm32ral::usb::USB::take().unwrap());
-    usb.setup();
+
+    // Define pinout
+    let pins = hal::gpio::Pins {
+        led: gpioa.pin(2),
+        cs: gpioa.pin(3),
+        fpga_rst: gpioa.pin(4),
+        sck: gpioa.pin(5),
+        flash_so: gpioa.pin(6),
+        flash_si: gpioa.pin(7),
+        fpga_so: gpiob.pin(4),
+        fpga_si: gpiob.pin(5),
+        tpwr_det: gpiob.pin(6),
+        tpwr_en: gpiob.pin(7),
+    };
+
+    // Create App instance with the HAL instances
+    let mut app = App::new(&flash, &rcc, &nvic, &pins, &mut spi, &mut usb);
+
+    // Initialise application, including system peripherals
+    app.setup();
 
     loop {
-        // Process pending interrupts
-        if nvic.usb_pending() {
-            usb.interrupt();
-            nvic.unpend_usb();
-        } else if nvic.spi1_pending() {
-            spi.interrupt();
-            nvic.unpend_spi1();
-        } else {
-            // Sleep until an interrupt occurs
-            cortex_m::asm::wfe();
-        }
+        // Process events
+        app.poll();
     }
 }
