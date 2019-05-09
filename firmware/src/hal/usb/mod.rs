@@ -221,8 +221,7 @@ impl USB {
             // Process standard requests
             SetupType::Standard => match StandardRequest::from_u8(setup.bRequest) {
                 Some(StandardRequest::GetDescriptor) => {
-                    let descriptor_type = setup.wValue >> 8;
-                    let descriptor_index = setup.wValue & 0xFF;
+                    let [descriptor_index, descriptor_type] = setup.wValue.to_le_bytes();
                     self.process_get_descriptor(
                         setup.wLength, descriptor_type as u8, descriptor_index as u8);
                 },
@@ -346,8 +345,9 @@ impl USB {
                 };
                 // Pack the u16 language codes into the u8 array
                 for (idx, lang) in STRING_LANGS.iter().enumerate() {
-                    desc.bString[idx*2] = (lang & 0xFF) as u8;
-                    desc.bString[idx*2+1] = (lang >> 8) as u8;
+                    let [u1, u2] = lang.to_le_bytes();
+                    desc.bString[idx*2  ] = u1;
+                    desc.bString[idx*2+1] = u2;
                 }
                 desc
             },
@@ -362,8 +362,9 @@ impl USB {
                 // Encode the &str to an iter of u16 and pack them
                 let string = STRINGS[idx as usize - 1].encode_utf16();
                 for (idx, cp) in string.enumerate() {
-                    desc.bString[idx*2] = (cp & 0xFF) as u8;
-                    desc.bString[idx*2+1] = (cp >> 8) as u8;
+                    let [u1, u2] = cp.to_le_bytes();
+                    desc.bString[idx*2  ] = u1;
+                    desc.bString[idx*2+1] = u2;
                 }
                 desc
             },

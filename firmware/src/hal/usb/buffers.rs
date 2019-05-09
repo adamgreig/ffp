@@ -64,12 +64,10 @@ impl EPBuf {
     pub fn read_rx(&self, btable: &BTableRow, data: &mut [u8]) {
         let rx_len = btable.rx_count();
         assert!(data.len() >= rx_len);
-        for idx in 0..rx_len/2 {
-            unsafe {
-                let word = core::ptr::read_volatile(&self.rx[idx]);
-                data[idx*2  ] = (word & 0xFF) as u8;
-                data[idx*2+1] = (word >>   8) as u8;
-            }
+        for (idx, word) in (&self.rx)[..rx_len/2].iter().enumerate() {
+            let [u1, u2] = word.to_le_bytes();
+            data[idx*2  ] = u1;
+            data[idx*2+1] = u2;
         }
     }
 }

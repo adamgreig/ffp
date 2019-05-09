@@ -141,9 +141,10 @@ pub enum SetupRecipient {
 
 impl SetupPID {
     pub fn from_buf(buf: &EPBuf) -> Self {
+        let [req_type, req] = buf.rx[0].to_le_bytes();
         SetupPID {
-            bmRequestType: (buf.rx[0] & 0xFF) as u8,
-            bRequest: (buf.rx[0] >> 8) as u8,
+            bmRequestType: req_type,
+            bRequest: req,
             wValue: buf.rx[1],
             wIndex: buf.rx[2],
             wLength: buf.rx[3],
