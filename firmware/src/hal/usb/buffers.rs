@@ -93,6 +93,6 @@ impl BTableRow {
         self.ADDR_TX = (&buf.tx as *const _ as u32 - USB_SRAM) as u16;
         self.ADDR_RX = (&buf.rx as *const _ as u32 - USB_SRAM) as u16;
         self.COUNT_TX = 0;
-        self.COUNT_RX = (1<<15) | (64/32) << 10;
+        self.COUNT_RX = (1<<15) | ((64/32 - 1) << 10);
     }
 }
