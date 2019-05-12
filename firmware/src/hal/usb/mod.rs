@@ -5,7 +5,7 @@ mod packets;
 mod buffers;
 mod descriptors;
 
-use packets::*;
+use packets::{*, ToBytes};
 use buffers::*;
 use descriptors::*;
 
@@ -295,10 +295,7 @@ impl USB {
     /// Transmit DEVICE descriptor
     fn process_get_device_descriptor(&mut self, w_length: u16) {
         let n = u16::min(DEVICE_DESCRIPTOR.bLength as u16, w_length) as usize;
-        // UNSAFE: Reading static packed memory of known length as a &[u8]
-        let data = unsafe { core::slice::from_raw_parts(
-            &DEVICE_DESCRIPTOR as *const _ as *const u8, n)
-        };
+        let data = DEVICE_DESCRIPTOR.to_bytes();
         self.ep0buf.write_tx(data);
         self.btable[0].tx_count(n);
         self.control_tx_valid();
@@ -312,25 +309,19 @@ impl USB {
 
         // Copy CONFIGURATION_DESCRIPTOR into buf
         let n1 = CONFIGURATION_DESCRIPTOR.bLength as usize;
-        // UNSAFE: Reading static packed memory of known length as a &[u8]
-        let data1 = unsafe { core::slice::from_raw_parts(
-            &CONFIGURATION_DESCRIPTOR as *const _ as *const u8, n1)};
+        let data1 = CONFIGURATION_DESCRIPTOR.to_bytes();
         buf[0..n1].copy_from_slice(data1);
 
         // Copy INTERFACE_DESCRIPTOR into buf
         let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
-        // UNSAFE: Reading static packed memory of known length as a &[u8]
-        let data2 = unsafe { core::slice::from_raw_parts(
-            &INTERFACE_DESCRIPTOR as *const _ as *const u8, n2)};
+        let data2 = INTERFACE_DESCRIPTOR.to_bytes();
         buf[n1..n1+n2].copy_from_slice(data2);
 
         // Copy all ENDPOINT_DESCRIPTORS into buf
         let mut n = n1+n2;
         for ep in ENDPOINT_DESCRIPTORS.iter() {
             let len = ep.bLength as usize;
-            // UNSAFE: Reading static packed memory of known length as a &[u8]
-            let data = unsafe { core::slice::from_raw_parts(
-                ep as *const _ as *const u8, len)};
+            let data = ep.to_bytes();
             buf[n..n+len].copy_from_slice(data);
             n += len;
         }
@@ -395,8 +386,7 @@ impl USB {
 
         let n = u16::min(desc.bLength as u16, w_length) as usize;
 
-        // UNSAFE: Converting a newly created object of known size to &[u8]
-        let data = unsafe { core::slice::from_raw_parts(&desc as *const _ as *const u8, n) };
+        let data = desc.to_bytes();
         self.ep0buf.write_tx(data);
         self.btable[0].tx_count(n);
         self.control_tx_valid();

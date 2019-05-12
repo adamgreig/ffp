@@ -254,3 +254,23 @@ impl VendorRequest {
         }
     }
 }
+
+/// Trait for structs which can be safely cast to &[u8].
+///
+/// Traits implementing ToBytes must be repr(packed).
+pub unsafe trait ToBytes: Sized {
+    fn to_bytes(&self) -> &[u8] {
+        // UNSAFE: We return a non-mutable slice into this packed struct's
+        // memory at the length of the struct, with a lifetime bound to &self.
+        unsafe {
+            core::slice::from_raw_parts(self as *const _ as *const u8,
+                                        core::mem::size_of::<Self>())
+        }
+    }
+}
+
+unsafe impl ToBytes for DeviceDescriptor {}
+unsafe impl ToBytes for ConfigurationDescriptor {}
+unsafe impl ToBytes for InterfaceDescriptor {}
+unsafe impl ToBytes for EndpointDescriptor {}
+unsafe impl ToBytes for StringDescriptor {}
