@@ -31,6 +31,7 @@ fn main() -> ! {
                                  stm32ral::crs::CRS::take().unwrap());
     let nvic = hal::nvic::NVIC::new(stm32ral::nvic::NVIC::take().unwrap(),
                                     stm32ral::scb::SCB::take().unwrap());
+    let dma = hal::dma::DMA::new(stm32ral::dma1::DMA1::take().unwrap());
     let gpioa = hal::gpio::GPIO::new(stm32ral::gpio::GPIOA::take().unwrap());
     let gpiob = hal::gpio::GPIO::new(stm32ral::gpio::GPIOB::take().unwrap());
     let mut spi = hal::spi::SPI::new(stm32ral::spi::SPI1::take().unwrap());
@@ -51,7 +52,7 @@ fn main() -> ! {
     };
 
     // Create App instance with the HAL instances
-    let mut app = App::new(&flash, &rcc, &nvic, &pins, &mut spi, &mut usb);
+    let mut app = App::new(&flash, &rcc, &nvic, &dma, &pins, &mut spi, &mut usb);
 
     // Initialise application, including system peripherals
     app.setup();

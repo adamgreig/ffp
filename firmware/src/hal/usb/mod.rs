@@ -103,6 +103,16 @@ impl USB {
         self.data_tx_slice(data);
     }
 
+    /// Indicate we can currently receive data
+    pub fn enable_rx(&mut self) {
+        self.data_rx_valid();
+    }
+
+    /// Indicate we cannot currently receive data
+    pub fn disable_rx(&mut self) {
+        self.data_rx_stall();
+    }
+
     /// Get any pending request, updating pending_request_ready as appropriate
     fn get_request(&mut self) -> Option<Request> {
         if let Some(req) = self.pending_request {
@@ -490,6 +500,13 @@ impl USB {
                    STAT_RX: Self::stat_valid(stat_rx));
     }
 
+    /// Mark data reception as invalid
+    fn data_rx_stall(&self) {
+        let (stat_rx, ep_type, ea) = read_reg!(usb, self.usb, EP1R, STAT_RX, EP_TYPE, EA);
+        write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 1, EA: ea,
+                   STAT_RX: Self::stat_stall(stat_rx));
+    }
+
     fn data_tx_slice(&mut self, data: &[u8]) {
         assert!(data.len() <= 64);
         self.ep1buf.write_tx(data);
@@ -621,14 +638,14 @@ impl USB {
     /// Responds to control on EP0 and bidirectional bulk on EP1
     fn set_configuration(&self) {
         // Set up EP1R to be a bidirectional bulk endpoint,
-        // with STAT_TX to NAK=10 and STAT_RX to Valid=11,
+        // with STAT_TX to NAK=10 and STAT_RX to Stall=11,
         // and DTOG_TX and DTOG_RX both set to 0.
         let (stat_tx, stat_rx, dtog_rx, dtog_tx) =
             read_reg!(usb, self.usb, EP1R, STAT_TX, STAT_RX, DTOG_RX, DTOG_TX);
         write_reg!(usb, self.usb, EP1R,
                    CTR_RX: 1, EP_TYPE: Bulk, EP_KIND: 0, CTR_TX: 1, EA: 1,
                    DTOG_RX: dtog_rx, DTOG_TX: dtog_tx,
-                   STAT_TX: Self::stat_nak(stat_tx), STAT_RX: Self::stat_valid(stat_rx));
+                   STAT_TX: Self::stat_nak(stat_tx), STAT_RX: Self::stat_stall(stat_rx));
 
         // Ensure all other endpoints are disabled by writing their current
         // values of STAT_TX/STAT_RX, setting them to 00 (disabled)

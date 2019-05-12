@@ -29,6 +29,10 @@ impl NVIC {
         self.is_pending(Interrupt::SPI1)
     }
 
+    pub fn dma_ch_2_3_pending(&self) -> bool {
+        self.is_pending(Interrupt::DMA1_CH2_3)
+    }
+
     pub fn unpend(&self, interrupt: Interrupt) {
         write_reg!(nvic, self.nvic, ICPR, 1<<(interrupt as u8));
     }
@@ -39,5 +43,9 @@ impl NVIC {
 
     pub fn unpend_spi1(&self) {
         self.unpend(Interrupt::SPI1);
+    }
+
+    pub fn unpend_dma_ch_2_3(&self) {
+        self.unpend(Interrupt::DMA1_CH2_3);
     }
 }

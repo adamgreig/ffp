@@ -30,17 +30,19 @@ pub struct App<'a> {
     flash: &'a hal::flash::Flash,
     rcc: &'a hal::rcc::RCC,
     nvic: &'a hal::nvic::NVIC,
+    dma: &'a hal::dma::DMA,
     pins: &'a hal::gpio::Pins<'a>,
     spi: &'a mut hal::spi::SPI,
     usb: &'a mut hal::usb::USB,
 }
 
 impl<'a> App<'a> {
-    pub fn new(flash: &'a hal::flash::Flash, rcc: &'a hal::rcc::RCC, nvic: &'a hal::nvic::NVIC,
+    pub fn new(flash: &'a hal::flash::Flash, rcc: &'a hal::rcc::RCC,
+               nvic: &'a hal::nvic::NVIC, dma: &'a hal::dma::DMA,
                pins: &'a hal::gpio::Pins<'a>, spi: &'a mut hal::spi::SPI,
                usb: &'a mut hal::usb::USB) -> Self {
         App {
-            flash, rcc, nvic, pins, spi, usb
+            flash, rcc, nvic, dma, pins, spi, usb,
         }
     }
 
@@ -51,6 +53,8 @@ impl<'a> App<'a> {
         self.rcc.setup();
         // Enable SEVONPEND
         self.nvic.setup();
+        // Configure DMA for SPI1 transfers
+        self.dma.setup();
         // Configure GPIOs
         self.pins.setup();
         // Configure SPI peripheral
@@ -66,10 +70,6 @@ impl<'a> App<'a> {
                 self.process_request(req);
             }
             self.nvic.unpend_usb();
-        } else if self.nvic.spi1_pending() {
-            // Handle SPI interrupts
-            self.spi.interrupt();
-            self.nvic.unpend_spi1();
         } else {
             // Sleep until an interrupt occurs
             cortex_m::asm::wfe();
@@ -83,11 +83,23 @@ impl<'a> App<'a> {
             Request::SetTPwr(state) => self.pins.tpwr_en.set_state(state),
             Request::SetLED(state) => self.pins.led.set_state(state),
             Request::SetMode(mode) => match mode {
-                Mode::HighImpedance => self.pins.high_impedance_mode(),
-                Mode::Flash => self.pins.flash_mode(),
-                Mode::FPGA => self.pins.fpga_mode(),
+                Mode::HighImpedance => {
+                    self.pins.high_impedance_mode();
+                    self.usb.disable_rx();
+                },
+                Mode::Flash => {
+                    self.pins.flash_mode();
+                    self.usb.enable_rx();
+                },
+                Mode::FPGA => {
+                    self.pins.fpga_mode();
+                    self.usb.enable_rx();
+                },
             },
-            Request::Transmit(data) => self.usb.reply_data(&data),
+            Request::Transmit(data) => {
+                let rxdata = self.spi.exchange(&self.dma, &data);
+                self.usb.reply_data(rxdata);
+            },
             Request::GetTPwr => self.usb.reply_tpwr(self.pins.tpwr_det.get_state()),
             Request::Bootload => hal::bootload::bootload(),
             Request::Suspend => {
