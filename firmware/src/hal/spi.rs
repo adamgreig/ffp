@@ -31,7 +31,7 @@ impl SPI {
         // Start SPI transfer
         modify_reg!(spi, self.spi, CR1, SPE: Enabled);
 
-        // Busy wait for RX DMA completion
+        // Busy wait for RX DMA completion (at most 43µs)
         while dma.spi1_busy() {}
 
         // Disable SPI and DMA

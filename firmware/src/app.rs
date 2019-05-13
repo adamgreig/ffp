@@ -85,15 +85,15 @@ impl<'a> App<'a> {
             Request::SetMode(mode) => match mode {
                 Mode::HighImpedance => {
                     self.pins.high_impedance_mode();
-                    self.usb.disable_rx();
+                    self.usb.disable_data_rx();
                 },
                 Mode::Flash => {
                     self.pins.flash_mode();
-                    self.usb.enable_rx();
+                    self.usb.enable_data_rx();
                 },
                 Mode::FPGA => {
                     self.pins.fpga_mode();
-                    self.usb.enable_rx();
+                    self.usb.enable_data_rx();
                 },
             },
             Request::Transmit(data) => {

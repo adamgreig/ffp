@@ -104,12 +104,12 @@ impl USB {
     }
 
     /// Indicate we can currently receive data
-    pub fn enable_rx(&mut self) {
+    pub fn enable_data_rx(&mut self) {
         self.data_rx_valid();
     }
 
     /// Indicate we cannot currently receive data
-    pub fn disable_rx(&mut self) {
+    pub fn disable_data_rx(&mut self) {
         self.data_rx_stall();
     }
 
