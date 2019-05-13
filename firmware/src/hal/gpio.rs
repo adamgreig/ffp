@@ -285,6 +285,7 @@ impl<'a> Pins<'a> {
             .set_high()
             .set_otype_opendrain()
             .set_ospeed_high()
+            .set_pull_up()
             .set_mode_output();
 
         // Open-drain output to FPGA reset line (active low).
