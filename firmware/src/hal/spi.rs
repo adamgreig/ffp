@@ -26,7 +26,7 @@ impl SPI {
 
     pub fn exchange(&mut self, dma: &DMA, data: &[u8]) -> &[u8] {
         // Set up DMA transfer (configures NDTR and MAR and enables streams)
-        dma.spi1_enable(data, &mut self.rxbuf);
+        dma.spi1_enable(data, &mut self.rxbuf[..data.len()]);
 
         // Start SPI transfer
         modify_reg!(spi, self.spi, CR1, SPE: Enabled);

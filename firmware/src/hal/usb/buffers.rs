@@ -58,17 +58,28 @@ impl EPBuf {
             // optimised to use different access semantics.
             unsafe { core::ptr::write_volatile(&mut self.tx[idx], data_u16[idx]) };
         }
+        // Handle final byte of odd-sized transfers
+        if data.len() & 1 == 1 {
+            self.tx[data_u16.len()] = data[data.len() - 1] as u16;
+        }
     }
 
     /// Copy rx buffer into `data`
-    pub fn read_rx(&self, btable: &BTableRow, data: &mut [u8]) {
+    pub fn read_rx(&self, btable: &BTableRow, data: &mut [u8]) -> usize {
         let rx_len = btable.rx_count();
         assert!(data.len() >= rx_len);
+        // Copy received data into `data`
         for (idx, word) in (&self.rx)[..rx_len/2].iter().enumerate() {
             let [u1, u2] = word.to_le_bytes();
             data[idx*2  ] = u1;
             data[idx*2+1] = u2;
         }
+        // Handle final byte of odd-sized transfers
+        if rx_len & 1 == 1 {
+            data[rx_len - 1] = self.rx[rx_len/2] as u8;
+        }
+        // Return size of received data
+        rx_len as usize
     }
 }
 

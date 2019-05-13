@@ -20,7 +20,7 @@ pub enum Request {
     SetTPwr(PinState),
     SetLED(PinState),
     SetMode(Mode),
-    Transmit([u8; 64]),
+    Transmit(([u8; 64], usize)),
     GetTPwr,
     Bootload,
     Suspend,
@@ -96,8 +96,8 @@ impl<'a> App<'a> {
                     self.usb.enable_data_rx();
                 },
             },
-            Request::Transmit(data) => {
-                let rxdata = self.spi.exchange(&self.dma, &data);
+            Request::Transmit((data, n)) => {
+                let rxdata = self.spi.exchange(&self.dma, &data[..n]);
                 self.usb.reply_data(rxdata);
             },
             Request::GetTPwr => self.usb.reply_tpwr(self.pins.tpwr_det.get_state()),

@@ -484,8 +484,8 @@ impl USB {
     fn process_data_rx(&mut self) {
         // Copy the received data
         let mut data = [0u8; 64];
-        self.ep1buf.read_rx(&self.btable[1], &mut data);
-        self.pending_request = Some(Request::Transmit(data));
+        let n = self.ep1buf.read_rx(&self.btable[1], &mut data);
+        self.pending_request = Some(Request::Transmit((data, n)));
         self.pending_request_ready = true;
 
         // Indicate we're ready to receive again

@@ -25,11 +25,12 @@ def main():
         bmRequestType=SET_MODE_TYPE, bRequest=SET_MODE, wValue=int(1))
 
     t0 = time.time()
-    print("Writing 128kB...")
-    for chunk in range(0, len(data), 64):
-        txdata = data[chunk:chunk+64]
+    print(f"Writing {len(data)/1024}kB...")
+    chunk_size = 64
+    for chunk in range(0, len(data), chunk_size):
+        txdata = data[chunk:chunk+chunk_size]
         ntx = dev.write(0x01, txdata)
-        rx = dev.read(0x81, 64)
+        rx = dev.read(0x81, chunk_size)
         if ntx != len(rx):
             print(f"Offset {chunk}: TX {ntx}, RX {len(rx)}!")
         if list(txdata) != list(rx):
