@@ -25,10 +25,6 @@ impl SPI {
     }
 
     pub fn exchange(&mut self, dma: &DMA, data: &[u8]) -> &[u8] {
-        // Set LDMA_TX and LDMA_RX as required
-        let ldma = (data.len() % 2) as u32;
-        modify_reg!(spi, self.spi, CR2, LDMA_TX: ldma, LDMA_TX: ldma);
-
         // Set up DMA transfer (configures NDTR and MAR and enables streams)
         dma.spi1_enable(data, &mut self.rxbuf);
 
