@@ -9,9 +9,9 @@ Title "FFP FPGA/Flash Programmer"
 Date "2019-04-30"
 Rev "1"
 Comp ""
-Comment1 "Drawn By: Adam Greig"
-Comment2 ""
-Comment3 ""
+Comment1 ""
+Comment2 "Copyright 2019 Adam Greig"
+Comment3 "Licensed under Creative Commons Attribution 4.0"
 Comment4 ""
 $EndDescr
 $Comp

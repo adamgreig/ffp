@@ -1,3 +1,6 @@
+// Copyright 2019 Adam Greig
+// Dual licensed under the Apache 2.0 and MIT licenses.
+
 #![no_std]
 #![no_main]
 

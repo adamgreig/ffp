@@ -1,3 +1,6 @@
+// Copyright 2019 Adam Greig
+// Dual licensed under the Apache 2.0 and MIT licenses.
+
 use stm32ral::gpio;
 use stm32ral::{read_reg, write_reg, modify_reg};
 use crate::app::PinState;

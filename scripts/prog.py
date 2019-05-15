@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 
+# Copyright 2019 Adam Greig
+# Dual licensed under the Apache 2.0 and MIT licenses.
+
 import time
 import math
 import struct
@@ -21,6 +24,7 @@ class Programmer:
     SET_MODE = 3
     SET_TPWR = 4
     SET_LED = 6
+    BOOTLOAD = 7
 
     TX_EP = 0x01
     RX_EP = 0x81
@@ -33,7 +37,10 @@ class Programmer:
         self.led_on()
 
     def __del__(self):
-        self.led_off()
+        try:
+            self.led_off()
+        except usb.core.USBError:
+            pass
 
     def _set(self, req, val):
         self.dev.ctrl_transfer(
@@ -71,6 +78,10 @@ class Programmer:
 
     def power_off(self):
         self._set(self.SET_TPWR, 0)
+
+    def bootload(self):
+        self.dev.ctrl_transfer(
+            bmRequestType=self.TYPE_SET, bRequest=self.BOOTLOAD)
 
     def write(self, data, progress=False):
         # Send hex-coded data
@@ -307,6 +318,10 @@ def get_args():
         "--power",
         help="Control target power",
         choices=("on", "off"))
+    group.add_argument(
+        "--bootload",
+        help="Reboot FFP to DFU bootloader",
+        action='store_true')
     return parser.parse_args()
 
 
@@ -337,7 +352,15 @@ def main():
             prog.power_on()
         elif args.power == "off":
             prog.power_off()
-    # prog.high_z_mode()
+    elif args.bootload:
+        prog.bootload()
+
+    # Return to high-z mode after use
+    # This might error if we just bootloaded so ignore that
+    try:
+        prog.high_z_mode()
+    except usb.core.USBError:
+        pass
 
 
 if __name__ == "__main__":

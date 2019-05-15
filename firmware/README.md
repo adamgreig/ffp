@@ -24,3 +24,12 @@ built in bootloader can be jumped to from the user application. Wild.
 0x1FFFF80C: 0x00FF
 0x1FFFF80E: 0x00FF
 ```
+
+## Licence
+
+Licensed under either of
+
+* Apache License, Version 2.0 ([LICENSE-APACHE](../LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license ([LICENSE-MIT](../LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
