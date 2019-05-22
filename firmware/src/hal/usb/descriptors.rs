@@ -7,10 +7,10 @@ use super::packets::*;
 pub static STRING_LANGS: [u16; 1] = [0x0409];
 pub static STRINGS: [&str; 3] = ["AGG", "FFP r1", "001"];
 
-// Test use only! From http://pid.codes/1209/0001/
+// Assigned by http://pid.codes/1209/FF50/
 const VENDOR_ID: u16 = 0x1209;
-const PRODUCT_ID: u16 = 0x0001;
-const DEVICE_ID: u16 = 0x0000;
+const PRODUCT_ID: u16 = 0xFF50;
+const DEVICE_ID: u16 = 0x0001;
 
 pub static DEVICE_DESCRIPTOR: DeviceDescriptor = DeviceDescriptor {
     bLength: size_of::<DeviceDescriptor>() as u8,

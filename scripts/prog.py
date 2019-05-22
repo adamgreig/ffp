@@ -16,7 +16,7 @@ from tqdm import trange
 
 class Programmer:
     ID_VENDOR = 0x1209
-    ID_PRODUCT = 0x0001
+    ID_PRODUCT = 0xff50
 
     TYPE_SET = 2 << 5
     SET_CS = 1

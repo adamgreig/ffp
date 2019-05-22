@@ -4,7 +4,7 @@ fn main() {
     let context = libusb::Context::new().unwrap();
     for device in context.devices().unwrap().iter() {
         let dd = device.device_descriptor().unwrap();
-        if dd.vendor_id() == 0x1209 && dd.product_id() == 0x0001 {
+        if dd.vendor_id() == 0x1209 && dd.product_id() == 0xff50 {
             let mut handle = device.open().unwrap();
             handle.claim_interface(0).unwrap();
             let timeout = Duration::from_millis(200);
