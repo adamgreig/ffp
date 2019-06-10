@@ -25,6 +25,17 @@ built in bootloader can be jumped to from the user application. Wild.
 0x1FFFF80E: 0x00FF
 ```
 
+## Bootloading
+
+To use the built-in ST USB bootloader:
+
+```
+cargo build --release
+arm-none-eabi-objcopy -O binary -S target/thumbv6m-none-eabi/release/ffp ffp.bin
+../scripts/prog.py --bootload
+dfu-util -a 0 -s 0x08000000 -D ffp.bin -R
+```
+
 ## Licence
 
 Licensed under either of
