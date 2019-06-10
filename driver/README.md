@@ -7,7 +7,7 @@ udev:
 
 ```
 sudo cp 99-ffp.rules /etc/udev/rules.d
-sudo systemctl restart udev
+sudo udevadm control --reload
 ```
 
 Confirm you are in the `plugdev` group, or modify `99-ffp.rules` to use another
