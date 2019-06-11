@@ -28,7 +28,7 @@ impl<'a> FPGA<'a> {
 
         // Send 8 dummy clocks with CS high then re-assert CS
         self.programmer.unselect()?;
-        self.programmer.write(&[0x00; 2])?;
+        self.programmer.write(&[0x00; 1])?;
         self.programmer.select()?;
 
         // Send configuration data
