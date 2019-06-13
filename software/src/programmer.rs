@@ -21,6 +21,7 @@ enum Mode {
     FPGA = 2,
 }
 
+/// Interface to FFP hardware
 pub struct Programmer<'a> {
     handle: libusb::DeviceHandle<'a>,
 }
@@ -33,6 +34,9 @@ impl <'a> Programmer<'a> {
     const RX_EP: u8             = 0x81;
     const CHUNK_SIZE: usize     = 64;
 
+    /// Create a new `Programmer` using the provided `DeviceHandle`.
+    ///
+    /// Turns on the FFP LED.
     pub fn from_handle(mut handle: libusb::DeviceHandle<'a>) -> Result<Self> {
         handle.claim_interface(0).context("Error claiming interface")?;
         let programmer = Self { handle };
@@ -40,6 +44,7 @@ impl <'a> Programmer<'a> {
         Ok(programmer)
     }
 
+    /// Create a new `Programmer` by finding an attached FFP on the USB bus
     pub fn find(context: &'a libusb::Context) -> Result<Self> {
         for device in context.devices().context("Error getting devices")?.iter() {
             let dd = device.device_descriptor().context("Error reading descriptor")?;
@@ -51,54 +56,67 @@ impl <'a> Programmer<'a> {
         Err(FFPError::NoDeviceFound)?
     }
 
+    /// Turn on the FFP LED
     pub fn led_on(&self) -> Result<()> {
         self.set(Command::SetLED, 1)
     }
 
+    /// Turn off the FFP LED
     pub fn led_off(&self) -> Result<()> {
         self.set(Command::SetLED, 0)
     }
 
+    /// Assert the FPGA reset signal
     pub fn reset(&self) -> Result<()> {
         self.set(Command::SetFPGAReset, 0)
     }
 
+    /// Deassert the FPGA reset signal
     pub fn unreset(&self) -> Result<()> {
         self.set(Command::SetFPGAReset, 1)
     }
 
+    /// Assert SPI CS
     pub fn select(&self) -> Result<()> {
         self.set(Command::SetCS, 0)
     }
 
+    /// Deassert SPI CS
     pub fn unselect(&self) -> Result<()> {
         self.set(Command::SetCS, 1)
     }
 
+    /// Set SPI pins to high impedance
     pub fn high_z_mode(&self) -> Result<()> {
         self.set(Command::SetMode, Mode::HighZ as u16)
     }
 
+    /// Set SPI pins to flash mode (for communicating with SPI flash)
     pub fn flash_mode(&self) -> Result<()> {
         self.set(Command::SetMode, Mode::Flash as u16)
     }
 
+    /// Set SPI pins to fpga mode (for communicating with FPGA)
     pub fn fpga_mode(&self) -> Result<()> {
         self.set(Command::SetMode, Mode::FPGA as u16)
     }
 
+    /// Enable target power switch on FFP
     pub fn power_on(&self) -> Result<()> {
         self.set(Command::SetTPwr, 1)
     }
 
+    /// Disable target power switch on FFP
     pub fn power_off(&self) -> Result<()> {
         self.set(Command::SetTPwr, 0)
     }
 
+    /// Reset FFP hardware into USB bootloader mode
     pub fn bootload(&self) -> Result<()> {
         self.set(Command::Bootload, 0)
     }
 
+    /// Write `data` to the FFP's bulk data endpoint
     pub fn write(&self, data: &[u8]) -> Result<Vec<u8>> {
         let timeout = Duration::from_millis(100);
         let mut rx = Vec::new();
@@ -118,6 +136,7 @@ impl <'a> Programmer<'a> {
         Ok(rx)
     }
 
+    /// Issue a control request to a specific value
     fn set(&self, request: Command, value: u16) -> Result<()> {
         let timeout = Duration::from_millis(100);
         match self.handle.write_control(
@@ -131,6 +150,7 @@ impl <'a> Programmer<'a> {
 }
 
 impl<'a> Drop for Programmer<'a> {
+    /// When dropped, turn off the FFP LED
     fn drop(&mut self) {
         self.led_off().ok();
     }

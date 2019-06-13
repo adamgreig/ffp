@@ -69,6 +69,8 @@ fn main() -> ffp::Result<()> {
                              .help("Start address (in bytes) to read from")
                              .long("offset")
                              .default_value("0"))))
+        .subcommand(SubCommand::with_name("bootload")
+            .about("Reset FFP hardware into USB bootloader"))
         .get_matches();
 
     let t0 = Instant::now();
@@ -145,6 +147,10 @@ fn main() -> ffp::Result<()> {
                 },
                 _ => panic!(),
             }
+        },
+        Some("bootload") => {
+            if !quiet { println!("Resetting FFP into bootloader") };
+            programmer.bootload()?;
         },
         _ => panic!(),
     };
