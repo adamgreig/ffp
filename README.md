@@ -7,8 +7,8 @@ Firmware and host software is written in Rust.
 ![Photo of FFP PCB](ffp_pcb.jpg)
 
 See [software/](software/) for the host-side software, [firmware/](firmware/)
-for the embedded device firmware, and [hardware/](hardware/) for the hardware
-design files.
+for the embedded device firmware, and [hardware/](hardware/ffp/) for the
+hardware design files.
 
 ## Pinout
 
