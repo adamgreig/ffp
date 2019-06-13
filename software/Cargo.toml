@@ -1,6 +1,6 @@
 [package]
 name = "ffp"
-description = "Programs iCE40 FPGAs and SPI flash memories"
+description = "Program iCE40 FPGAs and SPI flash memories"
 version = "1.0.0"
 authors = ["Adam Greig <adam@adamgreig.com>"]
 edition = "2018"

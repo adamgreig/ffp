@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::prelude::*;
+use std::time::Instant;
 use clap::{Arg, App, AppSettings, SubCommand};
 use clap::{value_t, crate_authors, crate_description, crate_version};
 use ffp::{Programmer, Flash, FPGA};
@@ -15,6 +16,11 @@ fn main() -> ffp::Result<()> {
         .global_setting(AppSettings::GlobalVersion)
         .global_setting(AppSettings::InferSubcommands)
         .global_setting(AppSettings::VersionlessSubcommands)
+        .arg(Arg::with_name("quiet")
+             .help("Suppress informative output")
+             .long("quiet")
+             .global(true)
+             .short("q"))
         .subcommand(SubCommand::with_name("fpga")
             .about("Reset, power, and program the FPGA")
             .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -65,8 +71,10 @@ fn main() -> ffp::Result<()> {
                              .default_value("0"))))
         .get_matches();
 
+    let t0 = Instant::now();
     let context = libusb::Context::new().expect("Error getting libusb context");
     let programmer = Programmer::find(&context)?;
+    let quiet = matches.is_present("quiet");
 
     match matches.subcommand_name() {
         Some("fpga") => {
@@ -74,22 +82,22 @@ fn main() -> ffp::Result<()> {
             let matches = matches.subcommand_matches("fpga").unwrap();
             match matches.subcommand_name() {
                 Some("reset") => {
-                    println!("Resetting FPGA");
+                    if !quiet { println!("Resetting FPGA") };
                     fpga.reset()?;
                 },
                 Some("power") => {
                     let matches = matches.subcommand_matches("power").unwrap();
                     let arg = matches.value_of("power").unwrap();
                     if arg == "on" {
-                        println!("Turning on target power");
+                        if !quiet { println!("Turning on target power") };
                         fpga.power_on()?;
                     } else if arg == "off" {
-                        println!("Turning off target power");
+                        if !quiet { println!("Turning off target power") };
                         fpga.power_off()?;
                     }
                 },
                 Some("program") => {
-                    println!("Programming FPGA");
+                    if !quiet { println!("Programming FPGA") };
                     let matches = matches.subcommand_matches("program").unwrap();
                     let path = matches.value_of("file").unwrap();
                     let mut file = File::open(path)?;
@@ -103,16 +111,18 @@ fn main() -> ffp::Result<()> {
         Some("flash") => {
             let flash = Flash::new(&programmer);
             let id = flash.read_id().expect("Error reading flash ID");
-            println!("Flash ID: {}", id);
+            if !quiet { println!("Flash ID: {}", id) };
             let matches = matches.subcommand_matches("flash").unwrap();
             match matches.subcommand_name() {
-                Some("id") => {},
+                Some("id") => {
+                    if quiet { println!("Flash ID: {}", id) };
+                },
                 Some("erase") => {
-                    println!("Erasing flash");
+                    if !quiet { println!("Erasing flash") };
                     flash.erase()?;
                 },
                 Some("program") => {
-                    println!("Programming flash");
+                    if !quiet { println!("Programming flash") };
                     let matches = matches.subcommand_matches("program").unwrap();
                     let path = matches.value_of("file").unwrap();
                     let offset = value_t!(matches.value_of("offset"), u32).unwrap();
@@ -124,7 +134,7 @@ fn main() -> ffp::Result<()> {
                     programmer.unreset()?;
                 },
                 Some("read") => {
-                    println!("Reading flash to file");
+                    if !quiet { println!("Reading flash to file") };
                     let matches = matches.subcommand_matches("read").unwrap();
                     let path = matches.value_of("file").unwrap();
                     let offset = value_t!(matches.value_of("offset"), u32).unwrap();
@@ -138,6 +148,9 @@ fn main() -> ffp::Result<()> {
         },
         _ => panic!(),
     };
+
+    let t1 = t0.elapsed();
+    if !quiet { println!("Finished in {}.{:.03}s", t1.as_secs(), t1.subsec_millis()) };
 
     Ok(())
 }
