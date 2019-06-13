@@ -150,7 +150,7 @@ fn main() -> ffp::Result<()> {
     };
 
     let t1 = t0.elapsed();
-    if !quiet { println!("Finished in {}.{:.03}s", t1.as_secs(), t1.subsec_millis()) };
+    if !quiet { println!("Finished in {}.{:02}s", t1.as_secs(), t1.subsec_millis()/10) };
 
     Ok(())
 }
