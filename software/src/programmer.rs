@@ -150,8 +150,9 @@ impl <'a> Programmer<'a> {
 }
 
 impl<'a> Drop for Programmer<'a> {
-    /// When dropped, turn off the FFP LED
+    /// When dropped, go to high-z mode and turn off the FFP LED
     fn drop(&mut self) {
+        self.high_z_mode().ok();
         self.led_off().ok();
     }
 }
