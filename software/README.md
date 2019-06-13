@@ -17,6 +17,9 @@ FFP software can be installed using Cargo:
 cargo install ffp
 ```
 
+You'll need to set up permissions to access the USB device, see the [drivers
+file](/drivers/) for more details.
+
 ## Usage
 
 Run `ffp help` for detailed usage. Commonly used commands:
@@ -26,3 +29,8 @@ Run `ffp help` for detailed usage. Commonly used commands:
 * `ffp fpga power on`
 * `ffp flash id`
 * `ffp flash program bitstream.bin`
+
+## Python Alternative
+
+The prototype for this software was written as a Python script which is also
+available ([prog.py](/scripts/prog.py)).

@@ -6,12 +6,18 @@ Firmware and host software is written in Rust.
 
 ![Photo of FFP PCB](ffp_pcb.jpg)
 
+See [software/](software/) for the host-side software, [firmware/](firmware/)
+for the embedded device firmware, and [hardware/](hardware/) for the hardware
+design files.
+
 ## Pinout
 
 The FFP r1 hardware uses a 5x2 pin 0.05"-pitch connector, which is also
 commonly used for Cortex family microcontrollers for SWD and JTAG. The pinout
 is deliberately compatible (though note `RESET` is moved) to allow hardware
-reuse and for compatibility with tools such as the TagConnect TC2030-CTX.
+reuse and for compatibility with tools such as TagConnect cables. It would
+also be possible to add SWD support to FFP without changing the hardware,
+permitting programming of Cortex-M devices.
 
 ```ascii
           ______
