@@ -43,15 +43,18 @@ impl std::fmt::Display for FlashID {
     }
 }
 
+/// Flash manager
 pub struct Flash<'a> {
     programmer: &'a Programmer<'a>,
 }
 
 impl<'a> Flash<'a> {
+    /// Create a new `Flash` using the given `Programmer`
     pub fn new(programmer: &'a Programmer) -> Self {
         Self { programmer }
     }
 
+    /// Read the attached flash device, manufacturer, and unique IDs
     pub fn read_id(&self) -> Result<FlashID> {
         self.programmer.reset()?;
         self.power_up()?;
@@ -61,30 +64,50 @@ impl<'a> Flash<'a> {
         Ok(FlashID { manufacturer_id, device_id, unique_id })
     }
 
+    /// Read `length` bytes of data from the attached flash, starting at `address`
     pub fn read(&self, address: u32, length: usize) -> Result<Vec<u8>> {
         self.fast_read(address, length)
     }
 
-    pub fn program(&self, address: u32, data: &[u8]) -> Result<()> {
+    /// Program the attached flash with `data` starting at `address`.
+    ///
+    /// If `verify` is true, also read-back the programmed data and
+    /// return FFPError::ReadbackError if it did not match what was written.
+    pub fn program(&self, address: u32, data: &[u8], verify: bool) -> Result<()> {
         self.erase_for_data(address, data.len())?;
         self.program_data(address, data)?;
-        let programmed = self.read(address, data.len())?;
-        if programmed == data {
-            Ok(())
+        if verify {
+            let programmed = self.read(address, data.len())?;
+            if programmed == data {
+                Ok(())
+            } else {
+                Err(FFPError::ReadbackError)?
+            }
         } else {
-            Err(FFPError::ReadbackError)?
+            Ok(())
         }
     }
 
+    /// Erase entire flash chip
+    pub fn erase(&self) -> Result<()> {
+        self.write_enable()?;
+        self.chip_erase()?;
+        self.wait_while_busy()?;
+        Ok(())
+    }
+
+    /// Reset the attached flash
     pub fn reset(&self) -> Result<()> {
         self.command(Command::EnableReset)?;
         self.command(Command::Reset)
     }
 
+    /// Power down the attached flash
     pub fn power_down(&self) -> Result<()> {
         self.command(Command::PowerDown)
     }
 
+    /// Power up the attached flash
     pub fn power_up(&self) -> Result<()> {
         self.command(Command::ReleasePowerdown)
     }
@@ -150,7 +173,6 @@ impl<'a> Flash<'a> {
         self.exchange(Command::FastRead, address, length).map(|data| data[1..].to_vec())
     }
 
-    #[allow(dead_code)]
     fn chip_erase(&self) -> Result<()> {
         self.command(Command::ChipErase)
     }

@@ -3,15 +3,37 @@ use std::time::Duration;
 use failure::ResultExt;
 use crate::{Programmer, Flash, Result};
 
+/// FPGA manager
 pub struct FPGA<'a> {
     programmer: &'a Programmer<'a>,
 }
 
 impl<'a> FPGA<'a> {
+    /// Create a new `FPGA` using the given `Programmer`
     pub fn new(programmer: &'a Programmer) -> Self {
         Self { programmer }
     }
 
+    /// Reset the attached FPGA
+    pub fn reset(&self) -> Result<()> {
+        self.programmer.reset()?;
+        sleep(Duration::from_millis(10));
+        self.programmer.unreset()
+    }
+
+    /// Enable target power
+    pub fn power_on(&self) -> Result<()> {
+        self.programmer.power_on()
+    }
+
+    /// Disable target power
+    pub fn power_off(&self) -> Result<()> {
+        self.programmer.power_off()
+    }
+
+    /// Program the attached FPGA with the provided bitstream
+    ///
+    /// The FPGA will be reset and start executing after programming completion.
     pub fn program(&self, data: &[u8]) -> Result<()> {
         // Hold FPGA in reset while we power down the flash
         self.programmer.reset()?;
