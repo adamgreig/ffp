@@ -18,7 +18,7 @@ cargo install ffp
 ```
 
 You'll need to set up permissions to access the USB device, see the [drivers
-file](/drivers/) for more details.
+file](/driver/) for more details.
 
 ## Usage
 
