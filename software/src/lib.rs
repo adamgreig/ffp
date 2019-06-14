@@ -16,6 +16,12 @@ pub enum FFPError {
     #[fail(display="No FFP device found")]
     NoDeviceFound,
 
+    #[fail(display="Multiple FFP devices found. Choose one with --index or --serial.")]
+    MultipleDevicesFound,
+
+    #[fail(display="Specified FFP device not found.")]
+    DeviceNotFound,
+
     #[fail(display="Not enough data read back from device: expected {}, read {}", expected, read)]
     NotEnoughData { expected: usize, read: usize },
 

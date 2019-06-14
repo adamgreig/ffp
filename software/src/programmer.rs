@@ -44,16 +44,52 @@ impl <'a> Programmer<'a> {
         Ok(programmer)
     }
 
+    /// Get a list of all attached FFP serial numbers
+    pub fn get_serials(context: &'a libusb::Context) -> Result<Vec<String>> {
+        let devices = Self::enumerate_devices(context)?;
+        Ok(devices.iter().map(|(_, serial)| serial.clone()).collect())
+    }
+
     /// Create a new `Programmer` by finding an attached FFP on the USB bus
     pub fn find(context: &'a libusb::Context) -> Result<Self> {
-        for device in context.devices().context("Error getting devices")?.iter() {
-            let dd = device.device_descriptor().context("Error reading descriptor")?;
-            if dd.vendor_id() == Self::ID_VENDOR && dd.product_id() == Self::ID_PRODUCT {
+        let devices = Self::enumerate_devices(context)?;
+        match devices.len() {
+            0 => Err(FFPError::NoDeviceFound)?,
+            1 => {
+                let handle = devices[0].0.open().context("Error opening device")?;
+                Self::from_handle(handle)
+            },
+            _ => {
+                println!("Multiple FFP devices found:");
+                for (idx, (_, serial)) in devices.iter().enumerate() {
+                    println!("    {}: {}", idx, serial);
+                }
+                Err(FFPError::MultipleDevicesFound)?
+            }
+        }
+    }
+
+    /// Create a new `Programmer` by finding the specific FFP with given serial number
+    pub fn by_serial(context: &'a libusb::Context, serial: &str) -> Result<Self> {
+        let devices = Self::enumerate_devices(context)?;
+        for (device, device_serial) in devices {
+            if device_serial == serial {
                 let handle = device.open().context("Error opening device")?;
                 return Self::from_handle(handle);
             }
         }
-        Err(FFPError::NoDeviceFound)?
+        Err(FFPError::DeviceNotFound)?
+    }
+
+    /// Create a new `Programmer` by indexing the list of all found FFP devices
+    pub fn by_index(context: &'a libusb::Context, index: usize) -> Result<Self> {
+        let devices = Self::enumerate_devices(context)?;
+        if index < devices.len() {
+            let handle = devices[index].0.open().context("Error opening device")?;
+            Self::from_handle(handle)
+        } else {
+            Err(FFPError::DeviceNotFound)?
+        }
     }
 
     /// Turn on the FFP LED
@@ -146,6 +182,22 @@ impl <'a> Programmer<'a> {
             Err(e) => Err(FFPError::USBError(e))
                         .context(format!("Error sending request {:?} {}", request, value))?,
         }
+    }
+
+    /// Return a list of all discovered FFP devices (by vendor and product ID)
+    fn enumerate_devices(context: &'a libusb::Context) -> Result<Vec<(libusb::Device, String)>> {
+        let timeout = Duration::from_millis(100);
+        let mut devices = Vec::new();
+        for device in context.devices().context("Error getting devices")?.iter() {
+            let dd = device.device_descriptor().context("Error reading descriptor")?;
+            if dd.vendor_id() == Self::ID_VENDOR && dd.product_id() == Self::ID_PRODUCT {
+                let handle = device.open().context("Error opening device")?;
+                let languages = handle.read_languages(timeout)?;
+                let serial = handle.read_serial_number_string(languages[0], &dd, timeout)?;
+                devices.push((device, serial));
+            }
+        }
+        Ok(devices)
     }
 }
 

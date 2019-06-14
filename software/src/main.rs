@@ -19,8 +19,21 @@ fn main() -> ffp::Result<()> {
         .arg(Arg::with_name("quiet")
              .help("Suppress informative output")
              .long("quiet")
-             .global(true)
-             .short("q"))
+             .short("q")
+             .global(true))
+        .arg(Arg::with_name("serial")
+             .help("Serial number of FFP device to use")
+             .long("serial")
+             .short("s")
+             .takes_value(true)
+             .global(true))
+        .arg(Arg::with_name("index")
+             .help("Index of FFP device to use")
+             .long("index")
+             .short("i")
+             .conflicts_with("serial")
+             .takes_value(true)
+             .global(true))
         .subcommand(SubCommand::with_name("fpga")
             .about("Reset, power, and program the FPGA")
             .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -71,12 +84,39 @@ fn main() -> ffp::Result<()> {
                              .default_value("0"))))
         .subcommand(SubCommand::with_name("bootload")
             .about("Reset FFP hardware into USB bootloader"))
+        .subcommand(SubCommand::with_name("devices")
+            .about("List available FFP devices"))
         .get_matches();
 
     let t0 = Instant::now();
     let context = libusb::Context::new().expect("Error getting libusb context");
-    let programmer = Programmer::find(&context)?;
     let quiet = matches.is_present("quiet");
+
+    // Special-case devices which does not need a programmer
+    if matches.subcommand_name().unwrap() == "devices" {
+        let devices = Programmer::get_serials(&context)?;
+        match devices.len() {
+            0 => println!("No FFP devices found."),
+            _ => {
+                match devices.len() {
+                    1 => println!("1 device found:"),
+                    _ => println!("{} devices found:", devices.len()),
+                }
+                for (idx, serial) in devices.iter().enumerate() {
+                    println!("    {}: {}", idx, serial);
+                }
+            },
+        }
+        return Ok(());
+    }
+
+    let programmer = if matches.is_present("serial") {
+        Programmer::by_serial(&context, matches.value_of("serial").unwrap())
+    } else if matches.is_present("index") {
+        Programmer::by_index(&context, value_t!(matches.value_of("index"), usize).unwrap())
+    } else {
+        Programmer::find(&context)
+    }?;
 
     match matches.subcommand_name() {
         Some("fpga") => {
