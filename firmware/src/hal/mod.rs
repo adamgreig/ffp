@@ -9,3 +9,4 @@ pub mod dma;
 pub mod spi;
 pub mod usb;
 pub mod bootload;
+pub mod unique_id;

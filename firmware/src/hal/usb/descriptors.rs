@@ -5,7 +5,8 @@ use core::mem::size_of;
 use super::packets::*;
 
 pub static STRING_LANGS: [u16; 1] = [0x0409];
-pub static STRINGS: [&str; 3] = ["AGG", "FFP r1", "001"];
+pub static STRING_MFN: &str = "AGG";
+pub static STRING_PRD: &str = "FFP r1";
 
 // Assigned by http://pid.codes/1209/FF50/
 const VENDOR_ID: u16 = 0x1209;

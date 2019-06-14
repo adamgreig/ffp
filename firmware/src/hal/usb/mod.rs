@@ -13,6 +13,7 @@ use buffers::*;
 use descriptors::*;
 
 use crate::app::{PinState, Mode, Request};
+use crate::hal::unique_id::get_hex_id;
 
 /// USB stack interface
 pub struct USB {
@@ -362,7 +363,7 @@ impl USB {
                 let mut desc = StringDescriptor {
                     bLength: 2 + 2 * STRING_LANGS.len() as u8,
                     bDescriptorType: DescriptorType::String as u8,
-                    bString: [0u8; 32],
+                    bString: [0u8; 48],
                 };
                 // Pack the u16 language codes into the u8 array
                 for (idx, lang) in STRING_LANGS.iter().enumerate() {
@@ -373,16 +374,29 @@ impl USB {
                 desc
             },
 
-            // Handle all other strings
-            idx if idx as usize <= STRINGS.len() => {
+            // Handle manufacturer, product, and serial number strings
+            1 | 2 | 3 => {
+                let id;
+                let string = match idx {
+                    1 => Ok(STRING_MFN),
+                    2 => Ok(STRING_PRD),
+                    3 => { id = get_hex_id(); core::str::from_utf8(&id) },
+                    _ => unreachable!(),
+                };
+                let string = match string {
+                    Ok(s) => s,
+                    Err(_) => {
+                        self.control_stall();
+                        return;
+                    }
+                };
                 let mut desc = StringDescriptor {
-                    bLength: 2 + 2 * STRINGS[idx as usize - 1].len() as u8,
+                    bLength: 2 + 2 * string.len() as u8,
                     bDescriptorType: DescriptorType::String as u8,
-                    bString: [0u8; 32],
+                    bString: [0u8; 48],
                 };
                 // Encode the &str to an iter of u16 and pack them
-                let string = STRINGS[idx as usize - 1].encode_utf16();
-                for (idx, cp) in string.enumerate() {
+                for (idx, cp) in string.encode_utf16().enumerate() {
                     let [u1, u2] = cp.to_le_bytes();
                     desc.bString[idx*2  ] = u1;
                     desc.bString[idx*2+1] = u2;
