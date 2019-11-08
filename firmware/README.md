@@ -31,9 +31,9 @@ To use the built-in ST USB bootloader:
 
 ```
 cargo build --release
-arm-none-eabi-objcopy -O binary -S target/thumbv6m-none-eabi/release/ffp ffp.bin
-../scripts/prog.py --bootload
-dfu-util -a 0 -s 0x08000000 -D ffp.bin -R
+arm-none-eabi-objcopy -O binary -S target/thumbv6m-none-eabi/release/ffp_firmware ffp.bin
+ffp bootload
+dfu-util -a 0 -s 0x08000000 -D ffp.bin
 ```
 
 ## Licence
