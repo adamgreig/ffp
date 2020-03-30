@@ -6,11 +6,10 @@
 
 extern crate panic_halt;
 use cortex_m_rt::{entry, pre_init};
+use cortex_m_semihosting::hprintln;
 
 pub mod hal;
 pub mod app;
-
-use app::App;
 
 #[pre_init]
 unsafe fn pre_init() {
@@ -28,17 +27,13 @@ unsafe fn pre_init() {
 
 #[entry]
 fn main() -> ! {
-    // Obtain all required HAL instances
-    let flash = hal::flash::Flash::new(stm32ral::flash::Flash::take().unwrap());
     let rcc = hal::rcc::RCC::new(stm32ral::rcc::RCC::take().unwrap(),
                                  stm32ral::crs::CRS::take().unwrap());
-    let nvic = hal::nvic::NVIC::new(stm32ral::nvic::NVIC::take().unwrap(),
-                                    stm32ral::scb::SCB::take().unwrap());
-    let dma = hal::dma::DMA::new(stm32ral::dma1::DMA1::take().unwrap());
+    //let nvic = hal::nvic::NVIC::new(stm32ral::nvic::NVIC::take().unwrap(),
+                                    //stm32ral::scb::SCB::take().unwrap());
     let gpioa = hal::gpio::GPIO::new(stm32ral::gpio::GPIOA::take().unwrap());
     let gpiob = hal::gpio::GPIO::new(stm32ral::gpio::GPIOB::take().unwrap());
-    let mut spi = hal::spi::SPI::new(stm32ral::spi::SPI1::take().unwrap());
-    let mut usb = hal::usb::USB::new(stm32ral::usb::USB::take().unwrap());
+    let spi = hal::spi::SPI::new(stm32ral::spi::SPI1::take().unwrap());
 
     // Define pinout
     let pins = hal::gpio::Pins {
@@ -54,14 +49,56 @@ fn main() -> ! {
         tpwr_en: gpiob.pin(7),
     };
 
-    // Create App instance with the HAL instances
-    let mut app = App::new(&flash, &rcc, &nvic, &dma, &pins, &mut spi, &mut usb);
+    rcc.setup();
+    pins.setup();
+    spi.setup_dap();
+    pins.dap_tx_mode();
+    cortex_m::asm::delay(2_000_000);
 
-    // Initialise application, including system peripherals
-    app.setup();
+    pins.tpwr_en.set_high();
+    cortex_m::asm::delay(5_000_000);
+
+    // 64 clocks with line high
+    for _ in 0..4 {
+        spi.tx16(0xFFFF);
+    }
+
+    // JTAG-to-SWD sequence
+    spi.tx16(0xE79E);
+
+    // 64 clocks with line high
+    for _ in 0..4 {
+        spi.tx16(0xFFFF);
+    }
+
+    // 16 clocks with line low
+    spi.tx16(0x0000);
+
+    // Read ID register
+    spi.tx8(0xA5);
+
+    pins.dap_tx_to_rx();
+    spi.drain();
+    let w1 = spi.rx16() as u32;
+    let w2 = spi.rx16() as u32;
+    let w3 = spi.rx8() as u32;
+
+    spi.stop();
+
+    pins.tpwr_en.set_low();
+
+    //let ack: u32 = (w1 >> 1) & 0b111;
+    //let data: u32 = (w1 >> 4) | (w2 << 4) | (w3 << 12) | (w4 << 20) | ((w5 & 0b1111) << 28);
+    //let parity: u32 = w5 & 0b00010000;
+    let ack: u32 = (w1 >> 1) & 0b111;
+    let data: u32 = (w1 >> 4) | (w2 << 12) | ((w3 & 0b1111) << 28);
+    let parity: u32 = w3 & 0b00010000;
+
+    //hprintln!("{:02X} {:02X} {:02X} {:02X} {:02X}", w1, w2, w3, w4, w5).ok();
+    hprintln!("{:04X} {:04X} {:02X}", w1, w2, w3).ok();
+    hprintln!("ack={:03b} data={:08X} parity={}", ack, data, parity).ok();
 
     loop {
-        // Process events
-        app.poll();
+        cortex_m::asm::nop();
     }
 }
