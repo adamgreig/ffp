@@ -87,7 +87,7 @@ impl<'a> SWD<'a> {
     }
 
     pub fn start(&self) {
-        self.pins.dap_tx();
+        self.pins.swd_tx();
         self.line_reset();
         self.jtag_to_swd();
         self.line_reset();
@@ -113,7 +113,7 @@ impl<'a> SWD<'a> {
     fn read(&self, apndp: APnDP, a: u8) -> Result<u32> {
         let req = Self::make_request(apndp, RnW::R, a);
         self.spi.tx8(req);
-        self.pins.dap_rx();
+        self.pins.swd_rx();
         self.spi.drain();
 
         // 1 clock for turnaround and 3 for ACK
@@ -131,7 +131,7 @@ impl<'a> SWD<'a> {
         let parity = (self.spi.rx8_chain_last() & 1) as u32;
 
         // Back to driving SWDIO to ensure it doesn't float high
-        self.pins.dap_tx();
+        self.pins.swd_tx();
 
         //let data = w1 | (w2 << 8) | (w3 << 16) | (w4 << 24);
         match parity == (data.count_ones() & 1) {
@@ -146,14 +146,14 @@ impl<'a> SWD<'a> {
 
         self.spi.tx8(req);
         self.spi.wait_busy();
-        self.pins.dap_rx();
+        self.pins.swd_rx();
         self.spi.drain();
 
         // 1 clock for turnaround and 3 for ACK and 1 for turnaround
         let ack = self.spi.rx5() >> 1;
         ACK::check_ok(ack as u8)?;
 
-        self.pins.dap_tx();
+        self.pins.swd_tx();
 
         // 32 clocks for data
         // Doing 4x8bit plus 8bit parity turns out to be

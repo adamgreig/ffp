@@ -25,6 +25,22 @@ pub struct Pins<'a> {
     pub fpga_si: Pin<'a>,
     pub tpwr_det: Pin<'a>,
     pub tpwr_en: Pin<'a>,
+
+    pub flash_si_input_mode: MemoisedMode,
+    pub flash_si_alternate_mode: MemoisedMode,
+}
+
+/// Stores a pre-computed mask and value for quickly changing pin mode
+#[derive(Copy, Clone)]
+pub struct MemoisedMode {
+    mask: u32,
+    value: u32,
+}
+
+impl MemoisedMode {
+    pub fn new() -> Self {
+        MemoisedMode { mask: 0, value: 0 }
+    }
 }
 
 impl<'a> GPIO {
@@ -68,20 +84,49 @@ impl<'a> GPIO {
         self
     }
 
+    pub fn memoise_mode(&'a self, n: u8, mode: u32) -> MemoisedMode {
+        assert!(n < 16);
+        let offset = n * 2;
+        let mask = 0b11 << offset;
+        let value = (mode << offset) & mask;
+        MemoisedMode { mask: !mask, value }
+    }
+
+    pub fn apply_memoised_mode(&'a self, mode: &MemoisedMode) -> &Self {
+        modify_reg!(gpio, self.p, MODER, |r| (r & mode.mask) | mode.value);
+        self
+    }
+
     pub fn set_mode_input(&'a self, n: u8) -> &Self {
         self.set_mode(n, gpio::MODER::MODER0::RW::Input)
+    }
+
+    pub fn memoise_mode_input(&'a self, n: u8) -> MemoisedMode {
+        self.memoise_mode(n, gpio::MODER::MODER0::RW::Input)
     }
 
     pub fn set_mode_output(&'a self, n: u8) -> &Self {
         self.set_mode(n, gpio::MODER::MODER0::RW::Output)
     }
 
+    pub fn memoise_mode_output(&'a self, n: u8) -> MemoisedMode {
+        self.memoise_mode(n, gpio::MODER::MODER0::RW::Output)
+    }
+
     pub fn set_mode_alternate(&'a self, n: u8) -> &Self {
         self.set_mode(n, gpio::MODER::MODER0::RW::Alternate)
     }
 
+    pub fn memoise_mode_alternate(&'a self, n: u8) -> MemoisedMode {
+        self.memoise_mode(n, gpio::MODER::MODER0::RW::Alternate)
+    }
+
     pub fn set_mode_analog(&'a self, n: u8) -> &Self {
         self.set_mode(n, gpio::MODER::MODER0::RW::Analog)
+    }
+
+    pub fn memoise_mode_analog(&'a self, n: u8) -> MemoisedMode {
+        self.memoise_mode(n, gpio::MODER::MODER0::RW::Analog)
     }
 
     pub fn set_otype(&'a self, n: u8, otype: u32) -> &Self {
@@ -219,6 +264,27 @@ impl<'a> Pin<'a> {
 
     pub fn set_mode_analog(&'a self) -> &Self {
         self.port.set_mode_analog(self.n);
+        self
+    }
+
+    pub fn memoise_mode_input(&'a self) -> MemoisedMode {
+        self.port.memoise_mode_input(self.n)
+    }
+
+    pub fn memoise_mode_output(&'a self) -> MemoisedMode {
+        self.port.memoise_mode_output(self.n)
+    }
+
+    pub fn memoise_mode_alternate(&'a self) -> MemoisedMode {
+        self.port.memoise_mode_alternate(self.n)
+    }
+
+    pub fn memoise_mode_analog(&'a self) -> MemoisedMode {
+        self.port.memoise_mode_analog(self.n)
+    }
+
+    pub fn apply_memoised_mode(&'a self, mode: &MemoisedMode) -> &Self {
+        self.port.apply_memoised_mode(mode);
         self
     }
 
@@ -375,7 +441,8 @@ impl<'a> Pins<'a> {
         self.fpga_si.set_mode_input();
     }
 
-    pub fn dap_mode(&self) {
+    /// Place SPI pins into SWD mode: flash_si pin is both MISO and sometimes MOSI
+    pub fn swd_mode(&self) {
         self.cs.set_mode_input();
         self.sck.set_mode_alternate().set_pull_up();
         self.flash_so.set_mode_input();
@@ -384,11 +451,13 @@ impl<'a> Pins<'a> {
         self.fpga_si.set_mode_input();
     }
 
-    pub fn dap_rx(&self) {
-        self.flash_si.set_mode_input();
+    /// Disconnect MOSI from flash_si, target drives the bus
+    pub fn swd_rx(&self) {
+        self.flash_si.apply_memoised_mode(&self.flash_si_input_mode);
     }
 
-    pub fn dap_tx(&self) {
-        self.flash_si.set_mode_alternate();
+    /// Connect MOSI to flash_si, we drive the bus
+    pub fn swd_tx(&self) {
+        self.flash_si.apply_memoised_mode(&self.flash_si_alternate_mode);
     }
 }

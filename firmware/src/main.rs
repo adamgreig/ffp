@@ -37,24 +37,30 @@ fn main() -> ! {
     let spi = hal::spi::SPI::new(stm32ral::spi::SPI1::take().unwrap());
 
     // Define pinout
+    let flash_si = gpioa.pin(7);
+    let flash_si_input_mode = flash_si.memoise_mode_input();
+    let flash_si_alternate_mode = flash_si.memoise_mode_alternate();
     let pins = hal::gpio::Pins {
         led: gpioa.pin(2),
         cs: gpioa.pin(3),
         fpga_rst: gpioa.pin(4),
         sck: gpioa.pin(5),
         flash_so: gpioa.pin(6),
-        flash_si: gpioa.pin(7),
+        flash_si,
         fpga_so: gpiob.pin(4),
         fpga_si: gpiob.pin(5),
         tpwr_det: gpiob.pin(6),
         tpwr_en: gpiob.pin(7),
+
+        flash_si_input_mode,
+        flash_si_alternate_mode,
     };
 
     rcc.setup();
     pins.setup();
     spi.setup_dap();
-    pins.dap_mode();
-    pins.dap_tx();
+    pins.swd_mode();
+    pins.swd_tx();
     cortex_m::asm::delay(2_000_000);
     pins.tpwr_en.set_high();
     cortex_m::asm::delay(5_000_000);
