@@ -10,6 +10,7 @@ use cortex_m_semihosting::hprintln;
 
 pub mod hal;
 pub mod app;
+pub mod swd;
 
 #[pre_init]
 unsafe fn pre_init() {
@@ -52,51 +53,59 @@ fn main() -> ! {
     rcc.setup();
     pins.setup();
     spi.setup_dap();
-    pins.dap_tx_mode();
+    pins.dap_mode();
+    pins.dap_tx();
     cortex_m::asm::delay(2_000_000);
-
     pins.tpwr_en.set_high();
     cortex_m::asm::delay(5_000_000);
 
-    // 64 clocks with line high
-    for _ in 0..4 {
-        spi.tx16(0xFFFF);
+    let id1;
+    let mut id2 = None;
+    let mut id3 = None;
+    let mut abort = None;
+
+    let swd = swd::SWD::new(&spi, &pins);
+    swd.start();
+    id1 = Some(swd.read_dp(swd::DPRegister::DPIDR));
+    if id1.unwrap().is_ok() {
+        id2 = Some(swd.read_dp(swd::DPRegister::DPIDR));
+        if id2.unwrap().is_ok() {
+            abort = Some(swd.write_dp(swd::DPRegister::DPIDR, 1));
+            if abort.unwrap().is_ok() {
+                id3 = Some(swd.read_dp(swd::DPRegister::DPIDR));
+            }
+        }
     }
 
-    // JTAG-to-SWD sequence
-    spi.tx16(0xE79E);
+    // send some 1s to fix the buggy Saleae SWD analyser
+    swd.idle_high();
 
-    // 64 clocks with line high
-    for _ in 0..4 {
-        spi.tx16(0xFFFF);
-    }
-
-    // 16 clocks with line low
-    spi.tx16(0x0000);
-
-    // Read ID register
-    spi.tx8(0xA5);
-
-    pins.dap_tx_to_rx();
-    spi.drain();
-    let w1 = spi.rx16() as u32;
-    let w2 = spi.rx16() as u32;
-    let w3 = spi.rx8() as u32;
-
-    spi.stop();
-
+    // Finish
     pins.tpwr_en.set_low();
 
-    //let ack: u32 = (w1 >> 1) & 0b111;
-    //let data: u32 = (w1 >> 4) | (w2 << 4) | (w3 << 12) | (w4 << 20) | ((w5 & 0b1111) << 28);
-    //let parity: u32 = w5 & 0b00010000;
-    let ack: u32 = (w1 >> 1) & 0b111;
-    let data: u32 = (w1 >> 4) | (w2 << 12) | ((w3 & 0b1111) << 28);
-    let parity: u32 = w3 & 0b00010000;
+    match id1 {
+        Some(Ok(id)) => { hprintln!("Read ID1: {:08x}", id).ok(); },
+        Some(Err(e)) => { hprintln!("Error reading ID1: {:?}", e).ok(); },
+        None => { hprintln!("No ID1").ok(); },
+    }
 
-    //hprintln!("{:02X} {:02X} {:02X} {:02X} {:02X}", w1, w2, w3, w4, w5).ok();
-    hprintln!("{:04X} {:04X} {:02X}", w1, w2, w3).ok();
-    hprintln!("ack={:03b} data={:08X} parity={}", ack, data, parity).ok();
+    match id2 {
+        Some(Ok(id)) => { hprintln!("Read ID2: {:08x}", id).ok(); },
+        Some(Err(e)) => { hprintln!("Error reading ID2: {:?}", e).ok(); },
+        None => { hprintln!("No ID2").ok(); },
+    }
+
+    match abort {
+        Some(Ok(_)) => { hprintln!("Wrote abort OK").ok(); },
+        Some(Err(e)) => { hprintln!("Error writing abort: {:?}", e).ok(); },
+        None => { hprintln!("No abort").ok(); },
+    }
+
+    match id3 {
+        Some(Ok(id)) => { hprintln!("Read ID3: {:08x}", id).ok(); },
+        Some(Err(e)) => { hprintln!("Error reading ID3: {:?}", e).ok(); },
+        None => { hprintln!("No ID3").ok(); },
+    }
 
     loop {
         cortex_m::asm::nop();

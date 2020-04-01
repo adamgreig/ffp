@@ -375,7 +375,7 @@ impl<'a> Pins<'a> {
         self.fpga_si.set_mode_input();
     }
 
-    pub fn dap_tx_mode(&self) {
+    pub fn dap_mode(&self) {
         self.cs.set_mode_input();
         self.sck.set_mode_alternate().set_pull_up();
         self.flash_so.set_mode_input();
@@ -384,20 +384,11 @@ impl<'a> Pins<'a> {
         self.fpga_si.set_mode_input();
     }
 
-    pub fn dap_rx_mode(&self) {
-        self.cs.set_mode_input();
-        self.sck.set_mode_alternate().set_pull_up();
-        self.flash_so.set_mode_input();
-        self.flash_si.set_mode_input();
-        self.fpga_so.set_mode_alternate();
-        self.fpga_si.set_mode_input();
-    }
-
-    pub fn dap_tx_to_rx(&self) {
+    pub fn dap_rx(&self) {
         self.flash_si.set_mode_input();
     }
 
-    pub fn dap_rx_to_tx(&self) {
+    pub fn dap_tx(&self) {
         self.flash_si.set_mode_alternate();
     }
 }
