@@ -53,7 +53,7 @@ enum ACK {
 }
 
 impl ACK {
-    pub fn check_ok(ack: u8) -> Result<()> {
+    pub fn try_ok(ack: u8) -> Result<()> {
         match ack {
             v if v == (ACK::OK as u8) => Ok(()),
             v if v == (ACK::WAIT as u8) => Err(Error::AckWait),
@@ -70,8 +70,7 @@ impl<'a> SWD<'a> {
     }
 
     fn line_reset(&self) {
-        // TODO: Change to 7. Seems to screw up the Saleae analyser at low clock speed though.
-        for _ in 0..8 {
+        for _ in 0..7 {
             self.spi.tx8(0xFF);
         }
     }
@@ -93,7 +92,7 @@ impl<'a> SWD<'a> {
         self.line_reset();
         self.jtag_to_swd();
         self.line_reset();
-        self.idle_low();
+        self.spi.tx8(0x00);
         self.spi.wait_busy();
     }
 
@@ -117,21 +116,25 @@ impl<'a> SWD<'a> {
         let req = Self::make_request(apndp, RnW::R, a);
         self.spi.tx8(req);
         self.spi.wait_busy();
-        self.pins.swd_rx();
         self.spi.drain();
+        self.pins.swd_rx();
 
         // 1 clock for turnaround and 3 for ACK
         let ack = self.spi.rx4() >> 1;
-        match ACK::check_ok(ack as u8) {
+        match ACK::try_ok(ack as u8) {
             Ok(_) => (),
-            Err(Error::AckWait) if wait_retries > 0 => {
-                self.pins.swd_tx();
-                return self.read(apndp, a, wait_retries - 1);
-            }
             Err(e) => {
+                // On non-OK ACK, target has released the bus but
+                // is still expecting a turnaround clock before
+                // the next request, and we need to take over the bus.
                 self.pins.swd_tx();
-                return Err(e);
-            },
+                self.idle_low();
+                match e {
+                    Error::AckWait if wait_retries > 0 =>
+                        return self.read(apndp, a, wait_retries - 1),
+                    _ => return Err(e),
+                }
+            }
         }
 
         // Read 8x4=32 bits of data and 8x1=8 bits for parity+turnaround+trailing.
@@ -154,24 +157,18 @@ impl<'a> SWD<'a> {
 
         self.spi.tx8(req);
         self.spi.wait_busy();
-        self.pins.swd_rx();
         self.spi.drain();
+        self.pins.swd_rx();
 
         // 1 clock for turnaround and 3 for ACK and 1 for turnaround
         let ack = (self.spi.rx5() >> 1) & 0b111;
-        match ACK::check_ok(ack as u8) {
-            Ok(_) => (),
-            Err(Error::AckWait) if wait_retries > 0 => {
-                self.pins.swd_tx();
-                return self.write(apndp, a, data, wait_retries - 1);
-            }
-            Err(e) => {
-                self.pins.swd_tx();
-                return Err(e);
-            },
-        }
-
         self.pins.swd_tx();
+        match ACK::try_ok(ack as u8) {
+            Ok(_) => (),
+            Err(Error::AckWait) if wait_retries > 0 =>
+                return self.write(apndp, a, data, wait_retries - 1),
+            Err(e) => return Err(e),
+        }
 
         // Write 8x4=32 bits of data and 8x1=8 bits for parity+trailing idle.
         // This way we keep the FIFO full and eliminate delays between words,

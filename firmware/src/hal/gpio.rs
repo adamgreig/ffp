@@ -28,6 +28,8 @@ pub struct Pins<'a> {
 
     pub flash_si_input_mode: MemoisedMode,
     pub flash_si_alternate_mode: MemoisedMode,
+    pub sck_output_mode: MemoisedMode,
+    pub sck_alternate_mode: MemoisedMode,
 }
 
 /// Stores a pre-computed mask and value for quickly changing pin mode
@@ -85,6 +87,7 @@ impl<'a> GPIO {
     }
 
     pub const fn memoise_mode(n: u8, mode: u32) -> MemoisedMode {
+        let n = n & 0xF;
         let offset = n * 2;
         let mask = 0b11 << offset;
         let value = (mode << offset) & mask;
@@ -472,5 +475,13 @@ impl<'a> Pins<'a> {
     /// Connect MOSI to flash_si, we drive the bus
     pub fn swd_tx(&self) {
         self.flash_si.apply_memoised_mode(&self.flash_si_alternate_mode);
+    }
+
+    pub fn swd_clk_direct(&self) {
+        self.sck.apply_memoised_mode(&self.sck_output_mode);
+    }
+
+    pub fn swd_clk_spi(&self) {
+        self.sck.apply_memoised_mode(&self.sck_alternate_mode);
     }
 }

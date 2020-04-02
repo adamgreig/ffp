@@ -120,6 +120,7 @@ pub fn swd_demo(swd: &swd::SWD) -> Result<[u32; 4]> {
 
 #[entry]
 fn main() -> ! {
+    let flash = hal::flash::Flash::new(stm32ral::flash::Flash::take().unwrap());
     let rcc = hal::rcc::RCC::new(stm32ral::rcc::RCC::take().unwrap(),
                                  stm32ral::crs::CRS::take().unwrap());
     //let nvic = hal::nvic::NVIC::new(stm32ral::nvic::NVIC::take().unwrap(),
@@ -129,9 +130,12 @@ fn main() -> ! {
     let spi = hal::spi::SPI::new(stm32ral::spi::SPI1::take().unwrap());
 
     // Define pinout
+    let sck = gpioa.pin(5);
     let flash_si = gpioa.pin(7);
     let flash_si_input_mode = flash_si.memoise_mode_input();
     let flash_si_alternate_mode = flash_si.memoise_mode_alternate();
+    let sck_output_mode = sck.memoise_mode_output();
+    let sck_alternate_mode = sck.memoise_mode_alternate();
     let pins = hal::gpio::Pins {
         led: gpioa.pin(2),
         cs: gpioa.pin(3),
@@ -146,39 +150,42 @@ fn main() -> ! {
 
         flash_si_input_mode,
         flash_si_alternate_mode,
+        sck_output_mode,
+        sck_alternate_mode,
     };
     let swd = swd::SWD::new(&spi, &pins);
 
+    flash.setup();
     rcc.setup();
     pins.setup();
     pins.swd_mode();
     pins.swd_tx();
     spi.setup_swd();
 
-    // Power up target and wait for ST-Link to stop asserting reset
-    pins.tpwr_en.set_high();
-    cortex_m::asm::delay(82_000_000);
-
-    // Run demo
-    let demo_result = swd_demo(&swd);
-
-    // Send some 1s to fix the buggy Saleae SWD analyser
-    swd.idle_high();
-
-    // Finished, power down target
-    pins.tpwr_en.set_low();
-
-    // See what we got
-    match demo_result {
-        Ok([w0, w1, w2, w3]) => {
-            hprintln!("Demo ran OK, results: {:08x} {:08x} {:08x} {:08x}", w0, w1, w2, w3).ok();
-        },
-        Err(e) => {
-            hprintln!("Demo error: {:?}", e).ok();
-        },
-    }
-
     loop {
-        cortex_m::asm::nop();
+
+        // Power up target and wait for ST-Link to stop asserting reset
+        pins.tpwr_en.set_high();
+        cortex_m::asm::delay(82_000_000);
+
+        // Run demo
+        let demo_result = swd_demo(&swd);
+
+        // Send some 1s to fix the buggy Saleae SWD analyser
+        swd.idle_high();
+
+        // Finished, power down target
+        pins.tpwr_en.set_low();
+
+        // See what we got
+        match demo_result {
+            Ok([w0, w1, w2, w3]) => {
+                hprintln!("Demo OK: {:08x} {:08x} {:08x} {:08x}",
+                          w0, w1, w2, w3).ok();
+            },
+            Err(e) => {
+                hprintln!("Demo error: {:?}", e).ok();
+            },
+        }
     }
 }

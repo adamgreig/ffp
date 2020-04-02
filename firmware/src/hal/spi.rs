@@ -47,7 +47,7 @@ impl SPI {
         write_reg!(spi, self.spi, CR1,
                    BIDIMODE: Unidirectional, CRCEN: Disabled, RXONLY: FullDuplex,
                    SSM: Enabled, SSI: SlaveNotSelected, LSBFIRST: LSBFirst,
-                   BR: Div128, MSTR: Master, CPOL: IdleHigh, CPHA: SecondEdge,
+                   BR: Div256, MSTR: Master, CPOL: IdleHigh, CPHA: SecondEdge,
                    SPE: Enabled);
     }
 
@@ -102,7 +102,7 @@ impl SPI {
         self.wait_txe();
     }
 
-    /// Transmit an SWD data phase, with 32 bits of data and 1 bit of parity.
+    /// Transmit an SWD WDATA phase, with 32 bits of data and 1 bit of parity.
     ///
     /// We transmit an extra 7 trailing idle bits after the parity bit because
     /// it's much quicker to do that than reconfigure SPI to a smaller data size.
@@ -114,7 +114,6 @@ impl SPI {
         self.wait_txe();
         // Trigger fifth and final word
         self.write_dr_u8(parity & 1);
-        self.wait_txe();
     }
 
     /// Receive 4 bits
@@ -133,15 +132,11 @@ impl SPI {
         self.read_dr_u8()
     }
 
-    /// Receive an SWD data phase, with 32 bits of data and 1 bit of parity.
+    /// Receive an SWD RDATA phase, with 32 bits of data and 1 bit of parity.
     ///
-    /// We clock out 7 idle cycles after the parity bit because the SPI peripheral
-    /// cannot be configured to only emit a single bit. Unfortunately the target
-    /// disconnects from the bus after the parity bit period, so the bus is undriven
-    /// and will be slowly pulled up. Since we're still emitting clock cycles, this
-    /// can trigger a false start on the bus. To remedy, this method requires the
-    /// Pins object be passed in, and uses it to reclaim control of the bus immediately
-    /// after the parity bit period.
+    /// This method requires `Pins` be passed in so it can directly control
+    /// the SWD lines at the end of RDATA in order to correctly sample PARITY
+    /// and then resume driving SWDIO.
     pub fn swd_rdata_phase(&self, pins: &Pins) -> (u32, u8) {
         write_reg!(spi, self.spi, CR2, FRXTH: Quarter, DS: EightBit);
         // Trigger 4 words, filling the FIFO
@@ -149,30 +144,37 @@ impl SPI {
         self.write_dr_u16(0);
         self.wait_rxne();
         let mut data = self.read_dr_u8() as u32;
-        // Trigger fifth and final word
-        self.write_dr_u8(0);
         self.wait_rxne();
         data |= (self.read_dr_u8() as u32) << 8;
         self.wait_rxne();
         data |= (self.read_dr_u8() as u32) << 16;
+
+        // While we wait for the final word to be available in the RXFIFO,
+        // handle the parity bit. First wait for current transaction to complete.
         self.wait_rxne();
+
+        // The parity bit is currently being driven onto the bus by the target.
+        // On the next rising edge, the target will release the bus, and we need
+        // to then start driving it before sending any more clocks to avoid a false START.
+        let parity = pins.flash_si.is_high() as u8;
+        // Take direct control of SWCLK
+        pins.swd_clk_direct();
+        // Send one clock pulse. Target releases bus after rising edge.
+        pins.sck.set_low();
+        pins.sck.set_high();
+        // Drive bus ourselves with 0 (all our SPI read transactions transmitted 0s)
+        pins.swd_tx();
+        // Restore SWCLK to SPI control
+        pins.swd_clk_spi();
+
+        // Trigger four dummy idle cycles
+        write_reg!(spi, self.spi, CR2, FRXTH: Quarter, DS: FourBit);
+        self.write_dr_u8(0);
+
+        // Now read the final data word that was waiting in RXFIFO
         data |= (self.read_dr_u8() as u32) << 24;
 
-        // Synchronise to the parity bit:
-        // Wait for TXE to indicate we're about to transmit the final word
-        self.wait_txe();
-        // Wait for the clock to run one period
-        // TODO: At high speeds the clock is done so fast we miss it and wait here forever.
-        // At low speeds this is essential to stop us driving the bus too soon and wiping out
-        // the target transmitted parity bit. Resolve.
-        while pins.sck.is_high() {}
-        while pins.sck.is_low() {}
-        // Swap the bus back to host-driven
-        pins.swd_tx();
-        // Wait for the final word to be received
-        self.wait_rxne();
-        let last = self.read_dr_u8();
-        (data, last)
+        (data, parity)
     }
 
     /// Empty the receive FIFO
