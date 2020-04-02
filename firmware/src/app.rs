@@ -61,7 +61,7 @@ impl<'a> App<'a> {
         // Configure GPIOs
         self.pins.setup();
         // Configure SPI peripheral
-        self.spi.setup();
+        self.spi.setup_spi();
         // Configure USB peripheral and connect to host
         self.usb.setup();
     }

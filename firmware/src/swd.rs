@@ -7,6 +7,8 @@ pub enum Error {
     AckFault,
     AckProtocol,
     AckUnknown(u8),
+    AckWaitTimeout,
+    Other(&'static str),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
@@ -23,6 +25,8 @@ pub enum DPRegister {
 pub struct SWD<'a> {
     spi: &'a SPI,
     pins: &'a Pins<'a>,
+
+    wait_retries: usize,
 }
 
 #[repr(u8)]
@@ -62,20 +66,18 @@ impl ACK {
 
 impl<'a> SWD<'a> {
     pub fn new(spi: &'a SPI, pins: &'a Pins) -> Self {
-        spi.setup_dap();
-        SWD { spi, pins }
+        SWD { spi, pins, wait_retries: 8 }
     }
 
     fn line_reset(&self) {
-        for _ in 0..7 {
+        // TODO: Change to 7. Seems to screw up the Saleae analyser at low clock speed though.
+        for _ in 0..8 {
             self.spi.tx8(0xFF);
         }
-        self.spi.wait_busy();
     }
 
     fn jtag_to_swd(&self) {
-        self.spi.tx8(0x9E);
-        self.spi.tx8(0xE7);
+        self.spi.tx16(0xE79E);
     }
 
     pub fn idle_high(&self) {
@@ -92,55 +94,61 @@ impl<'a> SWD<'a> {
         self.jtag_to_swd();
         self.line_reset();
         self.idle_low();
+        self.spi.wait_busy();
     }
 
     pub fn read_dp(&self, a: DPRegister) -> Result<u32> {
-        self.read(APnDP::DP, a as u8)
+        self.read(APnDP::DP, a as u8, self.wait_retries)
     }
 
     pub fn write_dp(&self, a: DPRegister, data: u32) -> Result<()> {
-        self.write(APnDP::DP, a as u8, data)
+        self.write(APnDP::DP, a as u8, data, self.wait_retries)
     }
 
     pub fn read_ap(&self, a: u8) -> Result<u32> {
-        self.read(APnDP::AP, a)
+        self.read(APnDP::AP, a, self.wait_retries)
     }
 
     pub fn write_ap(&self, a: u8, data: u32) -> Result<()> {
-        self.write(APnDP::AP, a, data)
+        self.write(APnDP::AP, a, data, self.wait_retries)
     }
 
-    fn read(&self, apndp: APnDP, a: u8) -> Result<u32> {
+    fn read(&self, apndp: APnDP, a: u8, wait_retries: usize) -> Result<u32> {
         let req = Self::make_request(apndp, RnW::R, a);
         self.spi.tx8(req);
+        self.spi.wait_busy();
         self.pins.swd_rx();
         self.spi.drain();
 
         // 1 clock for turnaround and 3 for ACK
         let ack = self.spi.rx4() >> 1;
-        ACK::check_ok(ack as u8)?;
+        match ACK::check_ok(ack as u8) {
+            Ok(_) => (),
+            Err(Error::AckWait) if wait_retries > 0 => {
+                self.pins.swd_tx();
+                return self.read(apndp, a, wait_retries - 1);
+            }
+            Err(e) => {
+                self.pins.swd_tx();
+                return Err(e);
+            },
+        }
 
-        // 32 clocks for data
-        let mut data = self.spi.rx8_chain_first() as u32;
-        data |= (self.spi.rx8_chain() as u32) << 8;
-        data |= (self.spi.rx8_chain() as u32) << 16;
-        data |= (self.spi.rx8_chain() as u32) << 24;
-
-        // 8 clocks for parity + turnaround, rest are trailing
-        // It's quicker to do 8 than drain FIFO, swap to 4bit, and do 4
-        let parity = (self.spi.rx8_chain_last() & 1) as u32;
+        // Read 8x4=32 bits of data and 8x1=8 bits for parity+turnaround+trailing.
+        // Doing a batch of 5 8-bit reads is the quickest option as we keep the FIFO hot.
+        let (data, parity) = self.spi.swd_rdata_phase(self.pins);
+        let parity = (parity & 1) as u32;
 
         // Back to driving SWDIO to ensure it doesn't float high
         self.pins.swd_tx();
 
-        //let data = w1 | (w2 << 8) | (w3 << 16) | (w4 << 24);
         match parity == (data.count_ones() & 1) {
             true => return Ok(data),
             false => return Err(Error::BadParity),
         }
     }
 
-    fn write(&self, apndp: APnDP, a: u8, data: u32) -> Result<()> {
+    fn write(&self, apndp: APnDP, a: u8, data: u32, wait_retries: usize) -> Result<()> {
         let req = Self::make_request(apndp, RnW::W, a);
         let parity = data.count_ones() & 1;
 
@@ -150,24 +158,28 @@ impl<'a> SWD<'a> {
         self.spi.drain();
 
         // 1 clock for turnaround and 3 for ACK and 1 for turnaround
-        let ack = self.spi.rx5() >> 1;
-        ACK::check_ok(ack as u8)?;
+        let ack = (self.spi.rx5() >> 1) & 0b111;
+        match ACK::check_ok(ack as u8) {
+            Ok(_) => (),
+            Err(Error::AckWait) if wait_retries > 0 => {
+                self.pins.swd_tx();
+                return self.write(apndp, a, data, wait_retries - 1);
+            }
+            Err(e) => {
+                self.pins.swd_tx();
+                return Err(e);
+            },
+        }
 
         self.pins.swd_tx();
 
-        // 32 clocks for data
-        // Doing 4x8bit plus 8bit parity turns out to be
-        // quicker than 2x16 bit plus 4bit parity, mainly
-        // because with 8bit writes we can keep the FIFO hot.
-        self.spi.tx8(((data >> 0) & 0xFF) as u8);
-        self.spi.tx8(((data >> 8) & 0xFF) as u8);
-        self.spi.tx8(((data >> 16) & 0xFF) as u8);
-        self.spi.tx8(((data >> 24) & 0xFF) as u8);
-
-        // 8 clocks for parity and trailing idle
-        // It's quicker to run 8 clocks than wait for SPI buffer
-        // to empty, change data size to 4 bits, then run 4 clocks.
-        self.spi.tx8(parity as u8);
+        // Write 8x4=32 bits of data and 8x1=8 bits for parity+trailing idle.
+        // This way we keep the FIFO full and eliminate delays between words,
+        // even at the cost of more trailing bits. We can't change DS to 4 bits
+        // until the FIFO is empty, and waiting for that costs more time overall.
+        // Additionally, many debug ports require a couple of clock cycles after
+        // the parity bit of a write transaction to make the write effective.
+        self.spi.swd_wdata_phase(data, parity as u8);
         self.spi.wait_busy();
 
         Ok(())

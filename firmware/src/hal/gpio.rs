@@ -84,8 +84,7 @@ impl<'a> GPIO {
         self
     }
 
-    pub fn memoise_mode(&'a self, n: u8, mode: u32) -> MemoisedMode {
-        assert!(n < 16);
+    pub const fn memoise_mode(n: u8, mode: u32) -> MemoisedMode {
         let offset = n * 2;
         let mask = 0b11 << offset;
         let value = (mode << offset) & mask;
@@ -101,32 +100,32 @@ impl<'a> GPIO {
         self.set_mode(n, gpio::MODER::MODER0::RW::Input)
     }
 
-    pub fn memoise_mode_input(&'a self, n: u8) -> MemoisedMode {
-        self.memoise_mode(n, gpio::MODER::MODER0::RW::Input)
+    pub const fn memoise_mode_input(n: u8) -> MemoisedMode {
+        Self::memoise_mode(n, gpio::MODER::MODER0::RW::Input)
     }
 
     pub fn set_mode_output(&'a self, n: u8) -> &Self {
         self.set_mode(n, gpio::MODER::MODER0::RW::Output)
     }
 
-    pub fn memoise_mode_output(&'a self, n: u8) -> MemoisedMode {
-        self.memoise_mode(n, gpio::MODER::MODER0::RW::Output)
+    pub const fn memoise_mode_output(n: u8) -> MemoisedMode {
+        Self::memoise_mode(n, gpio::MODER::MODER0::RW::Output)
     }
 
     pub fn set_mode_alternate(&'a self, n: u8) -> &Self {
         self.set_mode(n, gpio::MODER::MODER0::RW::Alternate)
     }
 
-    pub fn memoise_mode_alternate(&'a self, n: u8) -> MemoisedMode {
-        self.memoise_mode(n, gpio::MODER::MODER0::RW::Alternate)
+    pub const fn memoise_mode_alternate(n: u8) -> MemoisedMode {
+        Self::memoise_mode(n, gpio::MODER::MODER0::RW::Alternate)
     }
 
     pub fn set_mode_analog(&'a self, n: u8) -> &Self {
         self.set_mode(n, gpio::MODER::MODER0::RW::Analog)
     }
 
-    pub fn memoise_mode_analog(&'a self, n: u8) -> MemoisedMode {
-        self.memoise_mode(n, gpio::MODER::MODER0::RW::Analog)
+    pub const fn memoise_mode_analog(n: u8) -> MemoisedMode {
+        Self::memoise_mode(n, gpio::MODER::MODER0::RW::Analog)
     }
 
     pub fn set_otype(&'a self, n: u8, otype: u32) -> &Self {
@@ -242,6 +241,20 @@ impl<'a> Pin<'a> {
         }
     }
 
+    pub fn is_high(&self) -> bool {
+        match self.get_state() {
+            PinState::High => true,
+            PinState::Low => false,
+        }
+    }
+
+    pub fn is_low(&self) -> bool {
+        match self.get_state() {
+            PinState::Low => true,
+            PinState::High => false,
+        }
+    }
+
     pub fn toggle(&'a self) -> &Self {
         self.port.toggle(self.n);
         self
@@ -268,19 +281,19 @@ impl<'a> Pin<'a> {
     }
 
     pub fn memoise_mode_input(&'a self) -> MemoisedMode {
-        self.port.memoise_mode_input(self.n)
+        GPIO::memoise_mode_input(self.n)
     }
 
     pub fn memoise_mode_output(&'a self) -> MemoisedMode {
-        self.port.memoise_mode_output(self.n)
+        GPIO::memoise_mode_output(self.n)
     }
 
     pub fn memoise_mode_alternate(&'a self) -> MemoisedMode {
-        self.port.memoise_mode_alternate(self.n)
+        GPIO::memoise_mode_alternate(self.n)
     }
 
     pub fn memoise_mode_analog(&'a self) -> MemoisedMode {
-        self.port.memoise_mode_analog(self.n)
+        GPIO::memoise_mode_analog(self.n)
     }
 
     pub fn apply_memoised_mode(&'a self, mode: &MemoisedMode) -> &Self {
