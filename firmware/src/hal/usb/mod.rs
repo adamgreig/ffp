@@ -25,8 +25,6 @@ pub struct USB {
     ep1buf: &'static mut EPBuf,
     ep2buf: &'static mut EPBuf,
     pending_address: Option<u16>,
-    pending_control_tx: Option<(usize, usize)>,
-    pending_control_tx_buf: [u8; 256],
     pending_request: Option<Request>,
     pending_request_ready: bool,
 }
@@ -47,8 +45,6 @@ impl USB {
                 pending_address: None,
                 pending_request: None,
                 pending_request_ready: false,
-                pending_control_tx: None,
-                pending_control_tx_buf: [0u8; 256],
             }
         }
     }
@@ -197,11 +193,6 @@ impl USB {
         if self.pending_request.is_some() {
             self.pending_request_ready = true;
         }
-
-        // If we have more data to transmit, enqueue that
-        if self.pending_control_tx.is_some() {
-            self.control_tx_slice_next();
-        }
     }
 
     /// Process reception complete on EP0
@@ -224,38 +215,10 @@ impl USB {
 
     /// Respond to a control packet with the given slice as data
     fn control_tx_slice(&mut self, data: &[u8]) {
-        assert!(data.len() <= 320);
-        if data.len() <= 64 {
-            // If 64 bytes or fewer, transmit directly
-            self.ep0buf.write_tx(data);
-            self.btable[0].tx_count(data.len());
-        } else {
-            // For more than 64 bytes, transmit first 64 now, store rest for later
-            self.ep0buf.write_tx(&data[..64]);
-            self.btable[0].tx_count(64);
-            let leftover = data.len() - 64;
-            self.pending_control_tx_buf[..leftover].copy_from_slice(&data[64..]);
-            self.pending_control_tx = Some((0, data.len() - 64));
-        }
+        assert!(data.len() <= 64);
+        self.ep0buf.write_tx(data);
+        self.btable[0].tx_count(data.len());
         self.control_tx_valid();
-    }
-
-    /// Send next packet of control packet response data
-    fn control_tx_slice_next(&mut self) {
-        if let Some((idx, len)) = self.pending_control_tx {
-            if len <= 64 {
-                // For less than 64 bytes remaining, transmit entire remainder
-                self.ep0buf.write_tx(&self.pending_control_tx_buf[idx..idx+len]);
-                self.btable[0].tx_count(len);
-                self.pending_control_tx = None;
-            } else {
-                // For more than 64 bytes remaining, transmit next 64 bytes
-                self.ep0buf.write_tx(&self.pending_control_tx_buf[idx..idx+64]);
-                self.btable[0].tx_count(64);
-                self.pending_control_tx = Some((idx+64, len-64));
-            }
-            self.control_tx_valid();
-        }
     }
 
     /// Indicate a packet has been loaded into the buffer and is ready for transmission
