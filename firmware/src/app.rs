@@ -1,4 +1,4 @@
-// Copyright 2019 Adam Greig
+// Copyright 2019-2020 Adam Greig
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
 use crate::hal;
@@ -88,20 +88,20 @@ impl<'a> App<'a> {
             Request::SetMode(mode) => match mode {
                 Mode::HighImpedance => {
                     self.pins.high_impedance_mode();
-                    self.usb.disable_data_rx();
+                    self.usb.disable_spi_data_rx();
                 },
                 Mode::Flash => {
                     self.pins.flash_mode();
-                    self.usb.enable_data_rx();
+                    self.usb.enable_spi_data_rx();
                 },
                 Mode::FPGA => {
                     self.pins.fpga_mode();
-                    self.usb.enable_data_rx();
+                    self.usb.enable_spi_data_rx();
                 },
             },
             Request::Transmit((data, n)) => {
                 let rxdata = self.spi.exchange(&self.dma, &data[..n]);
-                self.usb.reply_data(rxdata);
+                self.usb.reply_spi_data(rxdata);
             },
             Request::GetTPwr => self.usb.reply_tpwr(self.pins.tpwr_det.get_state()),
             Request::Bootload => hal::bootload::bootload(),

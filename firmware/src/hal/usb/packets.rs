@@ -1,4 +1,4 @@
-// Copyright 2019 Adam Greig
+// Copyright 2019-2020 Adam Greig
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
 use super::buffers::*;
@@ -47,6 +47,8 @@ pub enum DescriptorType {
     String = 3,
     Interface = 4,
     Endpoint = 5,
+    HID = 0x21,
+    HIDReport = 0x22,
 }
 
 #[allow(non_snake_case)]
@@ -116,7 +118,20 @@ pub struct EndpointDescriptor {
 pub struct StringDescriptor {
     pub bLength: u8,
     pub bDescriptorType: u8,
-    pub bString: [u8; 48],
+    pub bString: [u8; 62],
+}
+
+#[allow(non_snake_case)]
+#[repr(C)]
+#[repr(packed)]
+pub struct HIDDescriptor {
+    pub bLength: u8,
+    pub bDescriptorType: u8,
+    pub bcdHID: u16,
+    pub bCountryCode: u8,
+    pub bNumDescriptors: u8,
+    pub bSubDescriptorType: u8,
+    pub wSubDescriptorLength: u16,
 }
 
 #[allow(unused)]
@@ -277,3 +292,4 @@ unsafe impl ToBytes for ConfigurationDescriptor {}
 unsafe impl ToBytes for InterfaceDescriptor {}
 unsafe impl ToBytes for EndpointDescriptor {}
 unsafe impl ToBytes for StringDescriptor {}
+unsafe impl ToBytes for HIDDescriptor {}

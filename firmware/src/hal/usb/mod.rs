@@ -1,4 +1,4 @@
-// Copyright 2019 Adam Greig
+// Copyright 2019-2020 Adam Greig
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
 use stm32ral::usb;
@@ -21,7 +21,10 @@ pub struct USB {
     btable: &'static mut [BTableRow; 8],
     ep0buf: &'static mut EPBuf,
     ep1buf: &'static mut EPBuf,
+    ep2buf: &'static mut EPBuf,
     pending_address: Option<u16>,
+    pending_control_tx: Option<(usize, usize)>,
+    pending_control_tx_buf: [u8; 256],
     pending_request: Option<Request>,
     pending_request_ready: bool,
 }
@@ -38,9 +41,12 @@ impl USB {
                 btable: &mut BTABLE,
                 ep0buf: &mut EP0BUF,
                 ep1buf: &mut EP1BUF,
+                ep2buf: &mut EP2BUF,
                 pending_address: None,
                 pending_request: None,
                 pending_request_ready: false,
+                pending_control_tx: None,
+                pending_control_tx_buf: [0u8; 256],
             }
         }
     }
@@ -70,7 +76,7 @@ impl USB {
         if ctr == 1 {
             match ep_id {
                 0 => self.process_control_ctr(),
-                1 => self.process_data_ctr(),
+                1 => self.process_spi_data_ctr(),
                 _ => {},
             }
             write_reg!(usb, self.usb, ISTR, CTR: 0, SUSP: 1, WKUP: 1, RESET: 1);
@@ -103,18 +109,18 @@ impl USB {
     }
 
     /// Transmit a given slice of data out the bulk endpoint
-    pub fn reply_data(&mut self, data: &[u8]) {
-        self.data_tx_slice(data);
+    pub fn reply_spi_data(&mut self, data: &[u8]) {
+        self.spi_data_tx_slice(data);
     }
 
     /// Indicate we can currently receive data
-    pub fn enable_data_rx(&mut self) {
-        self.data_rx_valid();
+    pub fn enable_spi_data_rx(&mut self) {
+        self.spi_data_rx_valid();
     }
 
     /// Indicate we cannot currently receive data
-    pub fn disable_data_rx(&mut self) {
-        self.data_rx_stall();
+    pub fn disable_spi_data_rx(&mut self) {
+        self.spi_data_rx_stall();
     }
 
     /// Get any pending request, updating pending_request_ready as appropriate
@@ -151,17 +157,17 @@ impl USB {
     }
 
     /// Process a communication-completed event on EP1
-    fn process_data_ctr(&mut self) {
+    fn process_spi_data_ctr(&mut self) {
         let (ctr_tx, ctr_rx, ep_type, ea) =
             read_reg!(usb, self.usb, EP1R, CTR_TX, CTR_RX, EP_TYPE, EA);
         if ctr_tx == 1 {
-            self.process_data_tx();
+            self.process_spi_data_tx();
             // Clear CTR_TX
             write_reg!(usb, self.usb, EP1R,
                        CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 0, EA: ea);
         }
         if ctr_rx == 1 {
-            self.process_data_rx();
+            self.process_spi_data_rx();
             // Clear CTR_RX
             write_reg!(usb, self.usb, EP1R,
                        CTR_RX: 0, EP_TYPE: ep_type, CTR_TX: 1, EA: ea);
@@ -189,6 +195,11 @@ impl USB {
         if self.pending_request.is_some() {
             self.pending_request_ready = true;
         }
+
+        // If we have more data to transmit, enqueue that
+        if self.pending_control_tx.is_some() {
+            self.control_tx_slice_next();
+        }
     }
 
     /// Process reception complete on EP0
@@ -209,12 +220,40 @@ impl USB {
                    STAT_RX: Self::stat_valid(stat_rx));
     }
 
-    /// Return the given slice as data
+    /// Respond to a control packet with the given slice as data
     fn control_tx_slice(&mut self, data: &[u8]) {
-        assert!(data.len() <= 64);
-        self.ep0buf.write_tx(data);
-        self.btable[0].tx_count(data.len());
+        assert!(data.len() <= 320);
+        if data.len() <= 64 {
+            // If 64 bytes or fewer, transmit directly
+            self.ep0buf.write_tx(data);
+            self.btable[0].tx_count(data.len());
+        } else {
+            // For more than 64 bytes, transmit first 64 now, store rest for later
+            self.ep0buf.write_tx(&data[..64]);
+            self.btable[0].tx_count(64);
+            let leftover = data.len() - 64;
+            self.pending_control_tx_buf[..leftover].copy_from_slice(&data[64..]);
+            self.pending_control_tx = Some((0, data.len() - 64));
+        }
         self.control_tx_valid();
+    }
+
+    /// Send next packet of control packet response data
+    fn control_tx_slice_next(&mut self) {
+        if let Some((idx, len)) = self.pending_control_tx {
+            if len <= 64 {
+                // For less than 64 bytes remaining, transmit entire remainder
+                self.ep0buf.write_tx(&self.pending_control_tx_buf[idx..idx+len]);
+                self.btable[0].tx_count(len);
+                self.pending_control_tx = None;
+            } else {
+                // For more than 64 bytes remaining, transmit next 64 bytes
+                self.ep0buf.write_tx(&self.pending_control_tx_buf[idx..idx+64]);
+                self.btable[0].tx_count(64);
+                self.pending_control_tx = Some((idx+64, len-64));
+            }
+            self.control_tx_valid();
+        }
     }
 
     /// Indicate a packet has been loaded into the buffer and is ready for transmission
@@ -310,30 +349,55 @@ impl USB {
     fn process_get_device_descriptor(&mut self, w_length: u16) {
         let n = u16::min(DEVICE_DESCRIPTOR.bLength as u16, w_length) as usize;
         let data = DEVICE_DESCRIPTOR.to_bytes();
-        self.ep0buf.write_tx(data);
-        self.btable[0].tx_count(n);
-        self.control_tx_valid();
+        self.control_tx_slice(&data[..n]);
     }
 
     /// Transmit CONFIGURATION, INTERFACE, and all ENDPOINT descriptors
     fn process_get_configuration_descriptor(&mut self, w_length: u16) {
         // We need to first copy all the descriptors into a single buffer,
         // as they are not u16-aligned.
-        let mut buf = [0u8; 64];
+        let mut buf = [0u8; 128];
+        let mut n = 0;
 
         // Copy CONFIGURATION_DESCRIPTOR into buf
-        let n1 = CONFIGURATION_DESCRIPTOR.bLength as usize;
-        let data1 = CONFIGURATION_DESCRIPTOR.to_bytes();
-        buf[0..n1].copy_from_slice(data1);
+        let len = CONFIGURATION_DESCRIPTOR.bLength as usize;
+        let data = CONFIGURATION_DESCRIPTOR.to_bytes();
+        buf[n..n+len].copy_from_slice(data);
+        n += len;
 
-        // Copy INTERFACE_DESCRIPTOR into buf
-        let n2 = INTERFACE_DESCRIPTOR.bLength as usize;
-        let data2 = INTERFACE_DESCRIPTOR.to_bytes();
-        buf[n1..n1+n2].copy_from_slice(data2);
+        // Copy SPI_INTERFACE_DESCRIPTOR into buf
+        let len = SPI_INTERFACE_DESCRIPTOR.bLength as usize;
+        let data = SPI_INTERFACE_DESCRIPTOR.to_bytes();
+        buf[n..n+len].copy_from_slice(data);
+        n += len;
 
-        // Copy all ENDPOINT_DESCRIPTORS into buf
-        let mut n = n1+n2;
-        for ep in ENDPOINT_DESCRIPTORS.iter() {
+        // Copy all SPI_ENDPOINT_DESCRIPTORS into buf
+        for ep in SPI_ENDPOINT_DESCRIPTORS.iter() {
+            let len = ep.bLength as usize;
+            let data = ep.to_bytes();
+            buf[n..n+len].copy_from_slice(data);
+            n += len;
+        }
+
+        // Copy DAP_INTERFACE_DESCRIPTOR into buf
+        let len = DAP_INTERFACE_DESCRIPTOR.bLength as usize;
+        let data = DAP_INTERFACE_DESCRIPTOR.to_bytes();
+        buf[n..n+len].copy_from_slice(data);
+        n += len;
+
+        // Copy DAP_HID_DESCRIPTOR into buf
+        let len = core::mem::size_of::<HIDDescriptor>();
+        let data = DAP_HID_DESCRIPTOR.to_bytes();
+        buf[n..n+len].copy_from_slice(data);
+        n += len;
+
+        // Copy DAP_HID_REPORT into buf
+        let len = DAP_HID_REPORT.len();
+        buf[n..n+len].copy_from_slice(&DAP_HID_REPORT[..]);
+        n += len;
+
+        // Copy all DAP_ENDPOINT_DESCRIPTORS into buf
+        for ep in DAP_ENDPOINT_DESCRIPTORS.iter() {
             let len = ep.bLength as usize;
             let data = ep.to_bytes();
             buf[n..n+len].copy_from_slice(data);
@@ -343,12 +407,8 @@ impl USB {
         // Only send as much data as was requested
         let n = usize::min(n, w_length as usize);
 
-        // Copy buf into the actual endpoint buffer
-        self.ep0buf.write_tx(&buf[..n]);
-        self.btable[0].tx_count(n);
-
-        // Set up transfer
-        self.control_tx_valid();
+        // Enqueue transmission
+        self.control_tx_slice(&buf[..n]);
     }
 
     /// Transmit STRING descriptor
@@ -363,7 +423,7 @@ impl USB {
                 let mut desc = StringDescriptor {
                     bLength: 2 + 2 * STRING_LANGS.len() as u8,
                     bDescriptorType: DescriptorType::String as u8,
-                    bString: [0u8; 48],
+                    bString: [0u8; 62],
                 };
                 // Pack the u16 language codes into the u8 array
                 for (idx, lang) in STRING_LANGS.iter().enumerate() {
@@ -381,6 +441,8 @@ impl USB {
                     1 => Ok(STRING_MFN),
                     2 => Ok(STRING_PRD),
                     3 => { id = get_hex_id(); core::str::from_utf8(&id) },
+                    4 => Ok(STRING_IF_SPI),
+                    5 => Ok(STRING_IF_DAP),
                     _ => unreachable!(),
                 };
                 let string = match string {
@@ -393,7 +455,7 @@ impl USB {
                 let mut desc = StringDescriptor {
                     bLength: 2 + 2 * string.len() as u8,
                     bDescriptorType: DescriptorType::String as u8,
-                    bString: [0u8; 48],
+                    bString: [0u8; 62],
                 };
                 // Encode the &str to an iter of u16 and pack them
                 for (idx, cp) in string.encode_utf16().enumerate() {
@@ -412,11 +474,8 @@ impl USB {
         };
 
         let n = u16::min(desc.bLength as u16, w_length) as usize;
-
         let data = desc.to_bytes();
-        self.ep0buf.write_tx(data);
-        self.btable[0].tx_count(n);
-        self.control_tx_valid();
+        self.control_tx_slice(&data[..n]);
     }
 
     /// Handle a vendor-specific request
@@ -489,7 +548,7 @@ impl USB {
     }
 
     /// Process transmission complete on EP1
-    fn process_data_tx(&mut self) {
+    fn process_spi_data_tx(&mut self) {
         // If we've got a pending request, we must have just sent an ACK,
         // so release the pending request to the application.
         if self.pending_request.is_some() {
@@ -498,7 +557,7 @@ impl USB {
     }
 
     /// Process reception complete on EP1
-    fn process_data_rx(&mut self) {
+    fn process_spi_data_rx(&mut self) {
         // Copy the received data
         let mut data = [0u8; 64];
         let n = self.ep1buf.read_rx(&self.btable[1], &mut data);
@@ -506,33 +565,33 @@ impl USB {
         self.pending_request_ready = true;
 
         // Indicate we're ready to receive again
-        self.data_rx_valid();
+        self.spi_data_rx_valid();
     }
 
-    /// Resume reception of new data packets
-    fn data_rx_valid(&self) {
+    /// Resume reception of new SPI data packets
+    fn spi_data_rx_valid(&self) {
         // Indicate we're ready to receive again by setting STAT_RX to VALID
         let (stat_rx, ep_type, ea) = read_reg!(usb, self.usb, EP1R, STAT_RX, EP_TYPE, EA);
         write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 1, EA: ea,
                    STAT_RX: Self::stat_valid(stat_rx));
     }
 
-    /// Mark data reception as invalid
-    fn data_rx_stall(&self) {
+    /// Mark SPI data reception as invalid
+    fn spi_data_rx_stall(&self) {
         let (stat_rx, ep_type, ea) = read_reg!(usb, self.usb, EP1R, STAT_RX, EP_TYPE, EA);
         write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 1, EA: ea,
                    STAT_RX: Self::stat_stall(stat_rx));
     }
 
-    fn data_tx_slice(&mut self, data: &[u8]) {
+    fn spi_data_tx_slice(&mut self, data: &[u8]) {
         assert!(data.len() <= 64);
         self.ep1buf.write_tx(data);
         self.btable[1].tx_count(data.len());
-        self.data_tx_valid();
+        self.spi_data_tx_valid();
     }
 
     /// Indicate a packet has been loaded into the buffer and is ready for transmission
-    fn data_tx_valid(&self) {
+    fn spi_data_tx_valid(&self) {
         let (stat_tx, ep_type, ea) = read_reg!(usb, self.usb, EP1R, STAT_TX, EP_TYPE, EA);
         write_reg!(usb, self.usb, EP1R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 1, EA: ea,
                    STAT_TX: Self::stat_valid(stat_tx));
