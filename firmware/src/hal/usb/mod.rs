@@ -336,9 +336,10 @@ impl USB {
                 self.process_get_device_descriptor(w_length),
             Some(DescriptorType::Configuration) =>
                 self.process_get_configuration_descriptor(w_length),
-
             Some(DescriptorType::String) =>
                 self.process_get_string_descriptor(w_length, descriptor_index),
+            Some(DescriptorType::HIDReport) =>
+                self.process_get_hid_report_descriptor(w_length, descriptor_index),
 
             // Ignore other descriptor types
             _ => self.control_stall(),
@@ -386,14 +387,9 @@ impl USB {
         n += len;
 
         // Copy DAP_HID_DESCRIPTOR into buf
-        let len = core::mem::size_of::<HIDDescriptor>();
+        let len = DAP_HID_DESCRIPTOR.bLength as usize;
         let data = DAP_HID_DESCRIPTOR.to_bytes();
         buf[n..n+len].copy_from_slice(data);
-        n += len;
-
-        // Copy DAP_HID_REPORT into buf
-        let len = DAP_HID_REPORT.len();
-        buf[n..n+len].copy_from_slice(&DAP_HID_REPORT[..]);
         n += len;
 
         // Copy all DAP_ENDPOINT_DESCRIPTORS into buf
@@ -476,6 +472,20 @@ impl USB {
         let n = u16::min(desc.bLength as u16, w_length) as usize;
         let data = desc.to_bytes();
         self.control_tx_slice(&data[..n]);
+    }
+
+    /// Transmit a HID REPORT descriptor
+    fn process_get_hid_report_descriptor(&mut self, w_length: u16, idx: u8) {
+        let report = match idx {
+            0 => &DAP_HID_REPORT[..],
+            _ => {
+                self.control_stall();
+                return;
+            }
+        };
+
+        let n = usize::min(report.len(), w_length as usize);
+        self.control_tx_slice(&report[..n]);
     }
 
     /// Handle a vendor-specific request

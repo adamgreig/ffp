@@ -214,6 +214,10 @@ impl DescriptorType {
                 Some(DescriptorType::Interface),
             x if x == DescriptorType::Endpoint as u8 =>
                 Some(DescriptorType::Endpoint),
+            x if x == DescriptorType::HID as u8 =>
+                Some(DescriptorType::HID),
+            x if x == DescriptorType::HIDReport as u8 =>
+                Some(DescriptorType::HIDReport),
             _ => None,
         }
     }

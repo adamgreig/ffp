@@ -96,7 +96,7 @@ pub static DAP_INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor {
 };
 
 pub static DAP_HID_DESCRIPTOR: HIDDescriptor = HIDDescriptor {
-    bLength: (size_of::<HIDDescriptor>() + DAP_HID_REPORT_LENGTH) as u8,
+    bLength: size_of::<HIDDescriptor>() as u8,
     bDescriptorType: DescriptorType::HID as u8,
     bcdHID: 0x0111,
     bCountryCode: 0x00,
