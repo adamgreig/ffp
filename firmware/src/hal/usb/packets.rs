@@ -1,6 +1,8 @@
 // Copyright 2019-2020 Adam Greig
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
+use core::convert::TryFrom;
+use num_enum::TryFromPrimitive;
 use super::buffers::*;
 
 #[allow(non_snake_case)]
@@ -14,6 +16,7 @@ pub struct SetupPID {
     pub wLength: u16,
 }
 
+#[derive(TryFromPrimitive)]
 #[repr(u8)]
 pub enum StandardRequest {
     ClearFeature = 1,
@@ -29,6 +32,7 @@ pub enum StandardRequest {
     SynchFrame = 12,
 }
 
+#[derive(TryFromPrimitive)]
 #[repr(u8)]
 pub enum VendorRequest {
     SetCS = 1,
@@ -40,6 +44,7 @@ pub enum VendorRequest {
     Bootload = 7,
 }
 
+#[derive(TryFromPrimitive)]
 #[repr(u8)]
 pub enum DescriptorType {
     Device = 1,
@@ -134,13 +139,16 @@ pub struct HIDDescriptor {
     pub wSubDescriptorLength: u16,
 }
 
+#[derive(TryFromPrimitive)]
+#[repr(u8)]
 #[allow(unused)]
 pub enum SetupDirection {
     HostToDevice = 0,
     DeviceToHost = 1,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq,TryFromPrimitive)]
+#[repr(u8)]
 pub enum SetupType {
     Standard = 0,
     Class = 1,
@@ -148,6 +156,8 @@ pub enum SetupType {
     Reserved = 3,
 }
 
+#[derive(TryFromPrimitive)]
+#[repr(u8)]
 #[allow(unused)]
 pub enum SetupRecipient {
     Device = 0,
@@ -171,109 +181,19 @@ impl SetupPID {
 
     #[allow(unused)]
     pub fn setup_direction(&self) -> SetupDirection {
-        match (self.bmRequestType & (0b1 << 7)) >> 5 {
-            0 => SetupDirection::HostToDevice,
-            1 => SetupDirection::DeviceToHost,
-            _ => unreachable!(),
-        }
+        let x = (self.bmRequestType & (0b1 << 7)) >> 5;
+        SetupDirection::try_from(x).unwrap()
     }
 
     pub fn setup_type(&self) -> SetupType {
-        match (self.bmRequestType & (0b11 << 5)) >> 5 {
-            0 => SetupType::Standard,
-            1 => SetupType::Class,
-            2 => SetupType::Vendor,
-            3 => SetupType::Reserved,
-            _ => unreachable!(),
-        }
+        let x = (self.bmRequestType & (0b11 << 5)) >> 5;
+        SetupType::try_from(x).unwrap()
     }
 
     #[allow(unused)]
     pub fn setup_recipient(&self) -> SetupRecipient {
-        match self.bmRequestType & 0b11111 {
-            0 => SetupRecipient::Device,
-            1 => SetupRecipient::Interface,
-            2 => SetupRecipient::Endpoint,
-            3 => SetupRecipient::Other,
-            _ => SetupRecipient::Unknown,
-        }
-    }
-}
-
-impl DescriptorType {
-    /// Attempt to convert a u8 to a DescriptorType
-    pub fn from_u8(x: u8) -> Option<Self> {
-        match x {
-            x if x == DescriptorType::Device as u8 =>
-                Some(DescriptorType::Device),
-            x if x == DescriptorType::Configuration as u8 =>
-                Some(DescriptorType::Configuration),
-            x if x == DescriptorType::String as u8 =>
-                Some(DescriptorType::String),
-            x if x == DescriptorType::Interface as u8 =>
-                Some(DescriptorType::Interface),
-            x if x == DescriptorType::Endpoint as u8 =>
-                Some(DescriptorType::Endpoint),
-            x if x == DescriptorType::HID as u8 =>
-                Some(DescriptorType::HID),
-            x if x == DescriptorType::HIDReport as u8 =>
-                Some(DescriptorType::HIDReport),
-            _ => None,
-        }
-    }
-}
-
-impl StandardRequest {
-    /// Attempt to convert a u8 to a StandardRequest
-    pub fn from_u8(x: u8) -> Option<Self> {
-        match x {
-            x if x == StandardRequest::ClearFeature as u8 =>
-                Some(StandardRequest::ClearFeature),
-            x if x == StandardRequest::GetConfiguration as u8 =>
-                Some(StandardRequest::GetConfiguration),
-            x if x == StandardRequest::GetDescriptor as u8 =>
-                Some(StandardRequest::GetDescriptor),
-            x if x == StandardRequest::GetInterface as u8 =>
-                Some(StandardRequest::GetInterface),
-            x if x == StandardRequest::GetStatus as u8 =>
-                Some(StandardRequest::GetStatus),
-            x if x == StandardRequest::SetAddress as u8 =>
-                Some(StandardRequest::SetAddress),
-            x if x == StandardRequest::SetConfiguration as u8 =>
-                Some(StandardRequest::SetConfiguration),
-            x if x == StandardRequest::SetDescriptor as u8 =>
-                Some(StandardRequest::SetDescriptor),
-            x if x == StandardRequest::SetFeature as u8 =>
-                Some(StandardRequest::SetFeature),
-            x if x == StandardRequest::SetInterface as u8 =>
-                Some(StandardRequest::SetInterface),
-            x if x == StandardRequest::SynchFrame as u8 =>
-                Some(StandardRequest::SynchFrame),
-            _ => None,
-        }
-    }
-}
-
-impl VendorRequest {
-    /// Attempt to convert a u8 to a VendorRequest
-    pub fn from_u8(x: u8) -> Option<Self> {
-        match x {
-            x if x == VendorRequest::SetCS as u8 =>
-                Some(VendorRequest::SetCS),
-            x if x == VendorRequest::SetFPGA as u8 =>
-                Some(VendorRequest::SetFPGA),
-            x if x == VendorRequest::SetMode as u8 =>
-                Some(VendorRequest::SetMode),
-            x if x == VendorRequest::SetTPwr as u8 =>
-                Some(VendorRequest::SetTPwr),
-            x if x == VendorRequest::GetTPwr as u8 =>
-                Some(VendorRequest::GetTPwr),
-            x if x == VendorRequest::SetLED as u8 =>
-                Some(VendorRequest::SetLED),
-            x if x == VendorRequest::Bootload as u8 =>
-                Some(VendorRequest::Bootload),
-            _ => None,
-        }
+        let x = self.bmRequestType & 0b11111;
+        SetupRecipient::try_from(x).unwrap_or(SetupRecipient::Unknown)
     }
 }
 

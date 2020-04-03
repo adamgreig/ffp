@@ -1,6 +1,8 @@
 // Copyright 2019-2020 Adam Greig
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
+use core::convert::TryFrom;
+
 use stm32ral::usb;
 use stm32ral::{read_reg, write_reg, modify_reg};
 
@@ -286,23 +288,23 @@ impl USB {
         let setup = SetupPID::from_buf(&self.ep0buf);
         match setup.setup_type() {
             // Process standard requests
-            SetupType::Standard => match StandardRequest::from_u8(setup.bRequest) {
-                Some(StandardRequest::GetDescriptor) => {
+            SetupType::Standard => match StandardRequest::try_from(setup.bRequest) {
+                Ok(StandardRequest::GetDescriptor) => {
                     let [descriptor_index, descriptor_type] = setup.wValue.to_le_bytes();
                     self.process_get_descriptor(
                         setup.wLength, descriptor_type as u8, descriptor_index as u8);
                 },
-                Some(StandardRequest::GetStatus) => {
+                Ok(StandardRequest::GetStatus) => {
                     // Reply with dummy status 0x0000
                     let data = [0u8, 0u8];
                     self.control_tx_slice(&data[..]);
                 },
-                Some(StandardRequest::SetAddress) => {
+                Ok(StandardRequest::SetAddress) => {
                     // Store new address for application after sending STATUS back
                     self.pending_address = Some(setup.wValue);
                     self.control_tx_ack();
                 },
-                Some(StandardRequest::SetConfiguration) => {
+                Ok(StandardRequest::SetConfiguration) => {
                     // Apply requested configuration
                     match setup.wValue {
                         0 => self.usb_reset(),
@@ -331,14 +333,14 @@ impl USB {
     fn process_get_descriptor(
         &mut self, w_length: u16, descriptor_type: u8, descriptor_index: u8
     ) {
-        match DescriptorType::from_u8(descriptor_type) {
-            Some(DescriptorType::Device) =>
+        match DescriptorType::try_from(descriptor_type) {
+            Ok(DescriptorType::Device) =>
                 self.process_get_device_descriptor(w_length),
-            Some(DescriptorType::Configuration) =>
+            Ok(DescriptorType::Configuration) =>
                 self.process_get_configuration_descriptor(w_length),
-            Some(DescriptorType::String) =>
+            Ok(DescriptorType::String) =>
                 self.process_get_string_descriptor(w_length, descriptor_index),
-            Some(DescriptorType::HIDReport) =>
+            Ok(DescriptorType::HIDReport) =>
                 self.process_get_hid_report_descriptor(w_length, descriptor_index),
 
             // Ignore other descriptor types
@@ -490,8 +492,8 @@ impl USB {
 
     /// Handle a vendor-specific request
     fn process_vendor_request(&mut self, setup: &SetupPID) {
-        match VendorRequest::from_u8(setup.bRequest) {
-            Some(VendorRequest::SetCS) => {
+        match VendorRequest::try_from(setup.bRequest) {
+            Ok(VendorRequest::SetCS) => {
                 match setup.wValue {
                     0 => self.pending_request = Some(Request::SetCS(PinState::Low)),
                     1 => self.pending_request = Some(Request::SetCS(PinState::High)),
@@ -500,7 +502,7 @@ impl USB {
                 self.control_tx_ack();
             },
 
-            Some(VendorRequest::SetFPGA) => {
+            Ok(VendorRequest::SetFPGA) => {
                 match setup.wValue {
                     0 => self.pending_request = Some(Request::SetFPGA(PinState::Low)),
                     1 => self.pending_request = Some(Request::SetFPGA(PinState::High)),
@@ -509,7 +511,7 @@ impl USB {
                 self.control_tx_ack();
             },
 
-            Some(VendorRequest::SetMode) => {
+            Ok(VendorRequest::SetMode) => {
                 match setup.wValue {
                     0 => self.pending_request = Some(Request::SetMode(Mode::HighImpedance)),
                     1 => self.pending_request = Some(Request::SetMode(Mode::Flash)),
@@ -519,7 +521,7 @@ impl USB {
                 self.control_tx_ack();
             },
 
-            Some(VendorRequest::SetTPwr) => {
+            Ok(VendorRequest::SetTPwr) => {
                 match setup.wValue {
                     0 => self.pending_request = Some(Request::SetTPwr(PinState::Low)),
                     1 => self.pending_request = Some(Request::SetTPwr(PinState::High)),
@@ -528,7 +530,7 @@ impl USB {
                 self.control_tx_ack();
             },
 
-            Some(VendorRequest::SetLED) => {
+            Ok(VendorRequest::SetLED) => {
                 match setup.wValue {
                     0 => self.pending_request = Some(Request::SetLED(PinState::Low)),
                     1 => self.pending_request = Some(Request::SetLED(PinState::High)),
@@ -537,7 +539,7 @@ impl USB {
                 self.control_tx_ack();
             }
 
-            Some(VendorRequest::GetTPwr) => {
+            Ok(VendorRequest::GetTPwr) => {
                 self.pending_request = Some(Request::GetTPwr);
                 // We don't ACK this, instead we immediately release the
                 // pending request to the application which will call
@@ -545,7 +547,7 @@ impl USB {
                 self.pending_request_ready = true;
             },
 
-            Some(VendorRequest::Bootload) => {
+            Ok(VendorRequest::Bootload) => {
                 self.pending_request = Some(Request::Bootload);
                 self.control_tx_ack();
             },
