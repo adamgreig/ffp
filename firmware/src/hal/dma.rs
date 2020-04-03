@@ -17,13 +17,13 @@ impl DMA {
 
     pub fn setup(&self) {
         // Set up channel 2 for SPI1_RX
-        write_reg!(dma, self.dma, CR2, PL: High, MSIZE: Bit8, PSIZE: Bit8,
+        write_reg!(dma, self.dma, CR2, PL: High, MSIZE: Bits8, PSIZE: Bits8,
                                        MINC: Enabled, PINC: Disabled, CIRC: Disabled,
                                        DIR: FromPeripheral, TCIE: Disabled, EN: Disabled);
         write_reg!(dma, self.dma, PAR2, stm32ral::spi::SPI1 as u32 + SPI_DR_OFFSET);
 
         // Set up channel 3 for SPI1_TX
-        write_reg!(dma, self.dma, CR3, PL: High, MSIZE: Bit8, PSIZE: Bit8,
+        write_reg!(dma, self.dma, CR3, PL: High, MSIZE: Bits8, PSIZE: Bits8,
                                        MINC: Enabled, PINC: Disabled, CIRC: Disabled,
                                        DIR: FromMemory, TCIE: Disabled, EN: Disabled);
         write_reg!(dma, self.dma, PAR3, stm32ral::spi::SPI1 as u32 + SPI_DR_OFFSET);
