@@ -1,15 +1,18 @@
 // Copyright 2019-2020 Adam Greig
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
+use num_enum::TryFromPrimitive;
 use crate::hal;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
 pub enum PinState {
     Low = 0,
     High = 1,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, TryFromPrimitive)]
+#[repr(u16)]
 pub enum Mode {
     HighImpedance = 0,
     Flash = 1,
@@ -88,22 +91,22 @@ impl<'a> App<'a> {
             Request::SetMode(mode) => match mode {
                 Mode::HighImpedance => {
                     self.pins.high_impedance_mode();
-                    self.usb.disable_spi_data_rx();
+                    self.usb.spi_data_disable();
                 },
                 Mode::Flash => {
                     self.pins.flash_mode();
-                    self.usb.enable_spi_data_rx();
+                    self.usb.spi_data_enable();
                 },
                 Mode::FPGA => {
                     self.pins.fpga_mode();
-                    self.usb.enable_spi_data_rx();
+                    self.usb.spi_data_enable();
                 },
             },
             Request::Transmit((data, n)) => {
                 let rxdata = self.spi.exchange(&self.dma, &data[..n]);
-                self.usb.reply_spi_data(rxdata);
+                self.usb.spi_data_reply(rxdata);
             },
-            Request::GetTPwr => self.usb.reply_tpwr(self.pins.tpwr_det.get_state()),
+            Request::GetTPwr => self.usb.tpwr_reply(self.pins.tpwr_det.get_state()),
             Request::Bootload => hal::bootload::bootload(),
             Request::Suspend => {
                 self.pins.high_impedance_mode();

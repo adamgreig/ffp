@@ -47,7 +47,7 @@ impl SPI {
         write_reg!(spi, self.spi, CR1,
                    BIDIMODE: Unidirectional, CRCEN: Disabled, RXONLY: FullDuplex,
                    SSM: Enabled, SSI: SlaveNotSelected, LSBFIRST: LSBFirst,
-                   BR: Div256, MSTR: Master, CPOL: IdleHigh, CPHA: SecondEdge,
+                   BR: Div128, MSTR: Master, CPOL: IdleHigh, CPHA: SecondEdge,
                    SPE: Enabled);
     }
 
