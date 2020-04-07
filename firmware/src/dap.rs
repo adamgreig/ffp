@@ -510,7 +510,7 @@ impl <'a> DAP<'a> {
                     // This requires an additional transfer so we'd
                     // ideally keep track of posted reads and just
                     // keep issuing new AP reads, but our reads are
-                    // so fast that for now this is simpler.
+                    // sufficiently fast that for now this is simpler.
                     let rdbuff = swd::DPRegister::RDBUFF.into();
                     if self.swd.read_ap(a).check(resp.mut_at(2)).is_none() {
                         break;
@@ -601,7 +601,7 @@ impl <'a> DAP<'a> {
                     // This requires an additional transfer so we'd
                     // ideally keep track of posted reads and just
                     // keep issuing new AP reads, but our reads are
-                    // so fast that for now this is simpler.
+                    // suffiently fast that for now this is simpler.
                     let rdbuff = swd::DPRegister::RDBUFF.into();
                     if self.swd.read_ap(a).check(resp.mut_at(3)).is_none() {
                         break;
@@ -633,37 +633,36 @@ impl <'a> DAP<'a> {
     }
 
     fn process_transfer_abort(&mut self, _req: Request) -> Option<ResponseWriter> {
+        // We'll only ever receive an abort request when we're not already
+        // processing anything else, since processing blocks checking for
+        // new requests. Therefore there's nothing to do here.
         None
     }
 }
 
 trait CheckResult<T> {
+    /// Check result of an SWD transfer, updating the response status byte.
+    ///
+    /// Returns Some(T) on successful transfer, None on error.
     fn check(self, resp: &mut u8) -> Option<T>;
 }
 
 impl<T> CheckResult<T> for swd::Result<T> {
     fn check(self, resp: &mut u8) -> Option<T> {
-        // Check result of an SWD transfer.
-        // Updates the response status byte (index 1).
-        // Returns Some(T) on successful transfer, None on error.
         match self {
             Ok(v) => {
-                //resp.write_u8_idx(2, 1);
                 *resp = 1;
                 Some(v)
             },
             Err(swd::Error::AckWait) => {
-                //resp.write_u8_idx(2, 2);
                 *resp = 2;
                 None
             },
             Err(swd::Error::AckFault) => {
-                //resp.write_u8_idx(2, 4);
                 *resp = 4;
                 None
             },
             Err(_) => {
-                //resp.write_u8_idx(2, (1<<3) | 7);
                 *resp = (1<<3) | 7;
                 None
             }
