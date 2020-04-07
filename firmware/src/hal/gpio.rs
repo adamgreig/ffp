@@ -443,7 +443,7 @@ impl<'a> Pins<'a> {
         self.sck.set_mode_alternate();
         self.fpga_so.set_mode_input();
         self.fpga_si.set_mode_input();
-        self.flash_so.set_mode_alternate();
+        self.flash_so.set_otype_pushpull().set_mode_alternate();
         self.flash_si.set_mode_alternate();
     }
 
@@ -457,11 +457,15 @@ impl<'a> Pins<'a> {
         self.fpga_si.set_mode_input();
     }
 
-    /// Place SPI pins into SWD mode: flash_si pin is both MISO and sometimes MOSI
+    /// Place SPI pins into SWD mode:
+    /// * sck pin is SPI clock
+    /// * fpga_so pin is always MISO
+    /// * flash_si pin is MOSI when we drive SWDIO or input when target drives it
+    /// * flash_so is output open-drain for nRESET
     pub fn swd_mode(&self) {
         self.cs.set_mode_input();
         self.sck.set_mode_alternate().set_pull_up();
-        self.flash_so.set_mode_input();
+        self.flash_so.set_otype_opendrain().set_high().set_mode_output();
         self.flash_si.set_mode_alternate();
         self.fpga_so.set_mode_alternate();
         self.fpga_si.set_mode_input();
@@ -477,10 +481,12 @@ impl<'a> Pins<'a> {
         self.flash_si.apply_memoised_mode(&self.flash_si_alternate_mode);
     }
 
+    /// Swap clk pin to direct output mode for manual driving
     pub fn swd_clk_direct(&self) {
         self.sck.apply_memoised_mode(&self.sck_output_mode);
     }
 
+    /// Swap clk pin back to alternate mode for SPI use
     pub fn swd_clk_spi(&self) {
         self.sck.apply_memoised_mode(&self.sck_alternate_mode);
     }

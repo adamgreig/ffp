@@ -2,7 +2,7 @@
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
 use num_enum::TryFromPrimitive;
-use crate::hal;
+use crate::{hal, dap};
 
 #[derive(Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
@@ -26,10 +26,11 @@ pub enum Request {
     SetTPwr(PinState),
     SetLED(PinState),
     SetMode(Mode),
-    Transmit(([u8; 64], usize)),
     GetTPwr,
     Bootload,
     Suspend,
+    SPITransmit(([u8; 64], usize)),
+    DAPCommand(([u8; 64], usize)),
 }
 
 pub struct App<'a> {
@@ -38,17 +39,18 @@ pub struct App<'a> {
     nvic: &'a hal::nvic::NVIC,
     dma: &'a hal::dma::DMA,
     pins: &'a hal::gpio::Pins<'a>,
-    spi: &'a mut hal::spi::SPI,
+    spi: &'a hal::spi::SPI,
     usb: &'a mut hal::usb::USB,
+    dap: &'a mut dap::DAP<'a>,
 }
 
 impl<'a> App<'a> {
     pub fn new(flash: &'a hal::flash::Flash, rcc: &'a hal::rcc::RCC,
                nvic: &'a hal::nvic::NVIC, dma: &'a hal::dma::DMA,
-               pins: &'a hal::gpio::Pins<'a>, spi: &'a mut hal::spi::SPI,
-               usb: &'a mut hal::usb::USB) -> Self {
+               pins: &'a hal::gpio::Pins<'a>, spi: &'a hal::spi::SPI,
+               usb: &'a mut hal::usb::USB, dap: &'a mut dap::DAP<'a>) -> Self {
         App {
-            flash, rcc, nvic, dma, pins, spi, usb,
+            flash, rcc, nvic, dma, pins, spi, usb, dap,
         }
     }
 
@@ -63,8 +65,6 @@ impl<'a> App<'a> {
         self.dma.setup();
         // Configure GPIOs
         self.pins.setup();
-        // Configure SPI peripheral
-        self.spi.setup_spi();
         // Configure USB peripheral and connect to host
         self.usb.setup();
     }
@@ -92,19 +92,32 @@ impl<'a> App<'a> {
                 Mode::HighImpedance => {
                     self.pins.high_impedance_mode();
                     self.usb.spi_data_disable();
+                    self.usb.dap_enable();
+                    self.spi.disable();
                 },
                 Mode::Flash => {
                     self.pins.flash_mode();
                     self.usb.spi_data_enable();
+                    self.usb.dap_disable();
+                    self.spi.setup_spi();
                 },
                 Mode::FPGA => {
                     self.pins.fpga_mode();
                     self.usb.spi_data_enable();
+                    self.usb.dap_disable();
+                    self.spi.setup_spi();
                 },
             },
-            Request::Transmit((data, n)) => {
-                let rxdata = self.spi.exchange(&self.dma, &data[..n]);
-                self.usb.spi_data_reply(rxdata);
+            Request::SPITransmit((txdata, n)) => {
+                let mut rxdata = [0u8; 64];
+                self.spi.exchange(&self.dma, &txdata[..n], &mut rxdata);
+                self.usb.spi_data_reply(&rxdata[..n]);
+            },
+            Request::DAPCommand((report, n)) => {
+                let response = self.dap.process_command(&report[..n]);
+                if let Some(data) = response {
+                    self.usb.dap_reply(data);
+                }
             },
             Request::GetTPwr => self.usb.tpwr_reply(self.pins.tpwr_det.get_state()),
             Request::Bootload => hal::bootload::bootload(),

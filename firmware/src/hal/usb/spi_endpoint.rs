@@ -24,11 +24,8 @@ impl SPIEndpoint {
         // Indicate we're ready to receive again
         self.rx_valid(usb);
 
-        // Note we don't ACK this data because the application will instead respond
-        // with the result of the SPI exchange by calling `USB::reply_spi_data`.
-
         // Return received data to the application
-        Some(USBStackRequest::AppRequest(Request::Transmit((data, n))))
+        Some(USBStackRequest::AppRequest(Request::SPITransmit((data, n))))
     }
 
     /// Indicate a packet has been loaded into the buffer and is ready for transmission

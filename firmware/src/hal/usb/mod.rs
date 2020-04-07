@@ -179,6 +179,21 @@ impl USB {
         self.spi_endpoint.rx_stall(&self.usb);
     }
 
+    /// Transmit a DAP report
+    pub fn dap_reply(&mut self, data: &[u8]) {
+        self.dap_endpoint.transmit_slice(&self.usb, data);
+    }
+
+    /// Indicate we can currently receive DAP requests
+    pub fn dap_enable(&mut self) {
+        self.dap_endpoint.rx_valid(&self.usb);
+    }
+
+    /// Indicate we cannot currently receive DAP requests
+    pub fn dap_disable(&mut self) {
+        self.dap_endpoint.rx_stall(&self.usb);
+    }
+
     /// Apply the power-on reset sequence
     ///
     /// Resets the USB peripheral and activates it.

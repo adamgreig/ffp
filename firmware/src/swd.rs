@@ -1,4 +1,8 @@
-use crate::hal::{spi::SPI, gpio::Pins};
+// Copyright 2019-2020 Adam Greig
+// Dual licensed under the Apache 2.0 and MIT licenses.
+
+use num_enum::IntoPrimitive;
+use crate::hal::{spi::{SPI, SPIClock}, gpio::Pins};
 
 #[derive(Copy, Clone, Debug)]
 pub enum Error {
@@ -7,14 +11,12 @@ pub enum Error {
     AckFault,
     AckProtocol,
     AckUnknown(u8),
-    AckWaitTimeout,
-    Other(&'static str),
 }
 
 pub type Result<T> = core::result::Result<T, Error>;
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, IntoPrimitive)]
 pub enum DPRegister {
     DPIDR       = 0,
     CTRLSTAT    = 1,
@@ -31,9 +33,18 @@ pub struct SWD<'a> {
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug)]
-enum APnDP {
+pub enum APnDP {
     DP = 0,
     AP = 1,
+}
+
+impl From<bool> for APnDP {
+    fn from(x: bool) -> APnDP {
+        match x {
+            true => APnDP::AP,
+            false => APnDP::DP,
+        }
+    }
 }
 
 #[repr(u8)]
@@ -69,6 +80,22 @@ impl<'a> SWD<'a> {
         SWD { spi, pins, wait_retries: 8 }
     }
 
+    pub fn set_clock(&self, clock: SPIClock) {
+        self.spi.set_clock(clock);
+    }
+
+    pub fn spi_enable(&self) {
+        self.spi.setup_swd();
+    }
+
+    pub fn spi_disable(&self) {
+        self.spi.disable();
+    }
+
+    pub fn set_wait_retries(&mut self, wait_retries: usize) {
+        self.wait_retries = wait_retries;
+    }
+
     fn line_reset(&self) {
         for _ in 0..7 {
             self.spi.tx8(0xFF);
@@ -77,6 +104,14 @@ impl<'a> SWD<'a> {
 
     fn jtag_to_swd(&self) {
         self.spi.tx16(0xE79E);
+    }
+
+    pub fn tx_sequence(&self, sequence: &[u8]) {
+        self.pins.swd_tx();
+        for byte in sequence {
+            self.spi.tx8(*byte);
+        }
+        self.spi.wait_busy();
     }
 
     pub fn idle_high(&self) {
@@ -96,23 +131,43 @@ impl<'a> SWD<'a> {
         self.spi.wait_busy();
     }
 
-    pub fn read_dp(&self, a: DPRegister) -> Result<u32> {
-        self.read(APnDP::DP, a as u8, self.wait_retries)
+    pub fn read_dp(&self, a: u8) -> Result<u32> {
+        self.read(APnDP::DP, a)
     }
 
-    pub fn write_dp(&self, a: DPRegister, data: u32) -> Result<()> {
-        self.write(APnDP::DP, a as u8, data, self.wait_retries)
+    pub fn write_dp(&self, a: u8, data: u32) -> Result<()> {
+        self.write(APnDP::DP, a, data)
     }
 
     pub fn read_ap(&self, a: u8) -> Result<u32> {
-        self.read(APnDP::AP, a, self.wait_retries)
+        self.read(APnDP::AP, a)
     }
 
     pub fn write_ap(&self, a: u8, data: u32) -> Result<()> {
-        self.write(APnDP::AP, a, data, self.wait_retries)
+        self.write(APnDP::AP, a, data)
     }
 
-    fn read(&self, apndp: APnDP, a: u8, wait_retries: usize) -> Result<u32> {
+    pub fn read(&self, apndp: APnDP, a: u8) -> Result<u32> {
+        for _ in 0..self.wait_retries {
+            match self.read_inner(apndp, a) {
+                Err(Error::AckWait) => continue,
+                x => return x,
+            }
+        }
+        Err(Error::AckWait)
+    }
+
+    pub fn write(&self, apndp: APnDP, a: u8, data: u32) -> Result<()> {
+        for _ in 0..self.wait_retries {
+            match self.write_inner(apndp, a, data) {
+                Err(Error::AckWait) => continue,
+                x => return x,
+            }
+        }
+        Err(Error::AckWait)
+    }
+
+    fn read_inner(&self, apndp: APnDP, a: u8) -> Result<u32> {
         let req = Self::make_request(apndp, RnW::R, a);
         self.spi.tx8(req);
         self.spi.wait_busy();
@@ -129,11 +184,7 @@ impl<'a> SWD<'a> {
                 // the next request, and we need to take over the bus.
                 self.pins.swd_tx();
                 self.idle_low();
-                match e {
-                    Error::AckWait if wait_retries > 0 =>
-                        return self.read(apndp, a, wait_retries - 1),
-                    _ => return Err(e),
-                }
+                return Err(e);
             }
         }
 
@@ -151,7 +202,7 @@ impl<'a> SWD<'a> {
         }
     }
 
-    fn write(&self, apndp: APnDP, a: u8, data: u32, wait_retries: usize) -> Result<()> {
+    fn write_inner(&self, apndp: APnDP, a: u8, data: u32) -> Result<()> {
         let req = Self::make_request(apndp, RnW::W, a);
         let parity = data.count_ones() & 1;
 
@@ -165,8 +216,6 @@ impl<'a> SWD<'a> {
         self.pins.swd_tx();
         match ACK::try_ok(ack as u8) {
             Ok(_) => (),
-            Err(Error::AckWait) if wait_retries > 0 =>
-                return self.write(apndp, a, data, wait_retries - 1),
             Err(e) => return Err(e),
         }
 

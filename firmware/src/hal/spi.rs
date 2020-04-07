@@ -9,7 +9,6 @@ use super::gpio::Pins;
 
 pub struct SPI {
     spi: spi::Instance,
-    rxbuf: [u8; 64],
 }
 
 #[repr(u32)]
@@ -25,9 +24,43 @@ pub enum SPIClock {
     Clk187k5    = 7,
 }
 
+impl SPIClock {
+    /// Returns the highest value for clock that is not higher than `max`,
+    /// or None if max is below the slowest clock option.
+    pub fn from_max(max: u32) -> Option<Self> {
+        match max {
+            f if f >= 24_000_000 => {
+                Some(SPIClock::Clk24M)
+            },
+            f if f >= 12_000_000 => {
+                Some(SPIClock::Clk12M)
+            },
+            f if f >= 6_000_000 => {
+                Some(SPIClock::Clk6M)
+            },
+            f if f >= 3_000_000 => {
+                Some(SPIClock::Clk3M)
+            },
+            f if f >= 1_500_000 => {
+                Some(SPIClock::Clk1M5)
+            },
+            f if f >= 750_000 => {
+                Some(SPIClock::Clk750k)
+            },
+            f if f >= 375_000 => {
+                Some(SPIClock::Clk375k)
+            },
+            f if f >= 187_500 => {
+                Some(SPIClock::Clk187k5)
+            },
+            _ => None,
+        }
+    }
+}
+
 impl SPI {
     pub fn new(spi: spi::Instance) -> Self {
-        SPI { spi, rxbuf: [0u8; 64] }
+        SPI { spi }
     }
 
     /// Set up SPI peripheral for normal SPI mode, either flash or FPGA
@@ -62,10 +95,12 @@ impl SPI {
         write_reg!(spi, self.spi, CR1, SPE: Disabled);
     }
 
-    /// Transmit `data` and return what we received back
-    pub fn exchange(&mut self, dma: &DMA, data: &[u8]) -> &[u8] {
+    /// Transmit `data` and write the same number of bytes into `rxdata`.
+    pub fn exchange(&self, dma: &DMA, txdata: &[u8], rxdata: &mut [u8]) {
+        debug_assert!(rxdata.len() >= 64);
+
         // Set up DMA transfer (configures NDTR and MAR and enables streams)
-        dma.spi1_enable(data, &mut self.rxbuf[..data.len()]);
+        dma.spi1_enable(txdata, &mut rxdata[..txdata.len()]);
 
         // Start SPI transfer
         modify_reg!(spi, self.spi, CR1, SPE: Enabled);
@@ -76,9 +111,6 @@ impl SPI {
         // Disable SPI and DMA
         dma.spi1_disable();
         modify_reg!(spi, self.spi, CR1, SPE: Disabled);
-
-        // Return reference to newly received data
-        &self.rxbuf[..data.len()]
     }
 
     /// Transmit 4 bits

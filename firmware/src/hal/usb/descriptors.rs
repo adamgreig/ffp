@@ -137,7 +137,7 @@ pub static DAP_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP_NUM_ENDPOINTS] = [
         bEndpointAddress: 0b1_000_0010,
         bmAttributes: 0b00_00_00_11,
         wMaxPacketSize: 64,
-        bInterval: 10,
+        bInterval: 1,
     },
 
     // EP2 OUT, INTERRUPT
@@ -147,7 +147,7 @@ pub static DAP_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP_NUM_ENDPOINTS] = [
         bEndpointAddress: 0b0_000_0010,
         bmAttributes: 0b00_00_00_11,
         wMaxPacketSize: 64,
-        bInterval: 10,
+        bInterval: 1,
     },
 ];
 

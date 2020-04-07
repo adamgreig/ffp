@@ -7,6 +7,8 @@ use stm32ral::{read_reg, write_reg};
 use super::{USBStackRequest, Endpoint, stat_disabled, stat_stall, stat_nak, stat_valid};
 use super::buffers::*;
 
+use crate::app::Request;
+
 /// USB handling code for DAP endpoint
 pub(super) struct DAPEndpoint {
     epbuf: &'static mut EPBuf,
@@ -14,12 +16,19 @@ pub(super) struct DAPEndpoint {
 }
 
 impl DAPEndpoint {
-    fn process_tx_complete(&self, _usb: &usb::Instance) -> Option<USBStackRequest> {
-        None
-    }
+    /// Process a complete received transaction.
+    /// This indicates a new report containing a DAP command has been received
+    /// from the host.
+    fn process_rx_complete(&mut self, usb: &usb::Instance) -> Option<USBStackRequest> {
+        // Copy received report
+        let mut data = [0u8; 64];
+        let n = self.epbuf.read_rx(&self.btable, &mut data);
 
-    fn process_rx_complete(&self, _usb: &usb::Instance) -> Option<USBStackRequest> {
-        None
+        // Indicate we're ready to receive again
+        self.rx_valid(usb);
+
+        // Return received data to the application for processing
+        Some(USBStackRequest::AppRequest(Request::DAPCommand((data, n))))
     }
 
     /// Indicate a packet has been loaded into the buffer and is ready for transmission
@@ -47,15 +56,14 @@ impl Endpoint for DAPEndpoint {
 
     fn configure_endpoint(&self, usb: &usb::Instance) {
         // Set up EP2R to be a didirectional interrupt endpoint,
-        // with STAT_TX to NAK=10 and STAT_RX to Stall=11,
+        // with STAT_TX to nak and STAT_RX to valid,
         // and DTOG_TX and DTOG_RX both set to 0.
         let (stat_tx, stat_rx, dtog_rx, dtog_tx) =
             read_reg!(usb, usb, EP2R, STAT_TX, STAT_RX, DTOG_RX, DTOG_TX);
         write_reg!(usb, usb, EP2R,
                    CTR_RX: 1, EP_TYPE: Interrupt, EP_KIND: 0, CTR_TX: 1, EA: 2,
                    DTOG_RX: dtog_rx, DTOG_TX: dtog_tx,
-                   STAT_TX: stat_nak(stat_tx), STAT_RX: stat_stall(stat_rx));
-
+                   STAT_TX: stat_nak(stat_tx), STAT_RX: stat_valid(stat_rx));
     }
 
     fn process_transfer(&mut self, usb: &usb::Instance) -> Option<USBStackRequest> {
@@ -63,7 +71,6 @@ impl Endpoint for DAPEndpoint {
         let (ctr_tx, ctr_rx, ep_type, ea) =
             read_reg!(usb, usb, EP2R, CTR_TX, CTR_RX, EP_TYPE, EA);
         if ctr_tx == 1 {
-            req = self.process_tx_complete(usb);
             // Clear CTR_TX
             write_reg!(usb, usb, EP2R,
                        CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 0, EA: ea);
