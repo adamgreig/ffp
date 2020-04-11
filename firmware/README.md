@@ -2,9 +2,22 @@
 
 ## Building
 
+You need to have Rust installed (visit [rustup.rs](https://rustup.rs)) and
+the thumbv6m-none-eabi target available:
+
+```
+rustup target add thumbv6m-none-eabi
+```
+
+Once installed, use Cargo to build:
+
 ```
 cargo build --release
 ```
+
+The resulting binary is an ELF file in
+`target/thumbv6m-none-eabi/release/ffp_firmware` which can be programmed via
+your usual programmer, or see below for bootloading.
 
 ## Bootloading
 
