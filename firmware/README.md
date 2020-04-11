@@ -8,10 +8,13 @@ cargo build --release
 
 ## Setting Option Bytes
 
-Note that the built in bootloader will just keep jumping to the user
-application if the `BOOT_SEL` option bit is set (the default). You have to
-clear this to 0 to force always booting from main flash, at which point the
-built in bootloader can be jumped to from the user application. Wild.
+On the STM32F042, the built-in bootloader performs an extra check of the boot
+configuration (BOOT_SEL option bit and nBOOT0 pin), jumping immediately to the
+user firmware if BOOT_SEL is set (the default) and BOOT0 is low. This means
+our firmware cannot jump to the bootloader without it immediately returning.
+
+To fix the problem we need to clear the BOOT_SEL option bit. To do so using
+a black magic probe in a gdb session:
 
 ```
 (gdb) mon option 0x1FFFF802 0x807F
