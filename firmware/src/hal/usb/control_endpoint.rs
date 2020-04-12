@@ -19,16 +19,24 @@ pub(super) struct ControlEndpoint {
     epbuf: &'static mut EPBuf,
     btable: &'static mut BTableRow,
     pending_request: Option<USBStackRequest>,
+    pending_tx: Option<(usize, usize)>,
+    pending_tx_buf: [u8; 256],
 }
 
 impl ControlEndpoint {
 
     /// Handle transmission completion.
     ///
-    /// This is typically called after we transmit an ACK for an incoming request,
-    /// at which time a pending request is ready to be processed.
-    fn process_tx_complete(&mut self) -> Option<USBStackRequest> {
-        // For most requests, especially including SET_ADDRESS, SET_CONFIGURATION,
+    /// Either we still have more data to transmit, in which case we prepare
+    /// remaining data for transmission, or we have finished transmitting
+    /// an acknowledgement and can now process an incoming request.
+    fn process_tx_complete(&mut self, usb: &usb::Instance) -> Option<USBStackRequest> {
+        // If we have more data to transmit, enqueue it
+        if self.pending_tx.is_some() {
+            self.transmit_next(usb);
+        }
+
+        // For many requests, especially including SET_ADDRESS, SET_CONFIGURATION,
         // or bootload, we have to ensure the response ACK has been transmitted
         // before the request is processed. The ControlEndpoint stores the request
         // and releases it to the stack after the ACK is sent.
@@ -108,6 +116,26 @@ impl ControlEndpoint {
     fn transmit_ack(&mut self, usb: &usb::Instance) {
         self.btable.tx_count(0);
         self.tx_valid(usb);
+    }
+
+    fn transmit_next(&mut self, usb: &usb::Instance) {
+        if let Some((idx, len)) = self.pending_tx {
+            if len < 64 {
+                // When there's less than the maximum packet size remaining,
+                // immediately send all remaining data.
+                // This also includes the case where len==0 and we send a ZLP.
+                self.epbuf.write_tx(&self.pending_tx_buf[idx..idx+len]);
+                self.btable.tx_count(len);
+                self.pending_tx = None;
+            } else {
+                // For 64 or more bytes remaining, transmit next packet
+                // and adjust pending_tx.
+                self.epbuf.write_tx(&self.pending_tx_buf[idx..idx+64]);
+                self.btable.tx_count(64);
+                self.pending_tx = Some((idx+64, len-64));
+            }
+            self.tx_valid(usb);
+        }
     }
 
     /// Indicate a packet has been loaded into the buffer and is ready for transmission
@@ -399,6 +427,8 @@ impl Endpoint for ControlEndpoint {
             epbuf,
             btable,
             pending_request: None,
+            pending_tx: None,
+            pending_tx_buf: [0u8; 256],
         }
     }
 
@@ -430,7 +460,7 @@ impl Endpoint for ControlEndpoint {
         let (ctr_tx, ctr_rx, ep_type, ea) =
             read_reg!(usb, usb, EP0R, CTR_TX, CTR_RX, EP_TYPE, EA);
         if ctr_tx == 1 {
-            req = self.process_tx_complete();
+            req = self.process_tx_complete(usb);
 
             // Clear CTR_TX
             write_reg!(usb, usb, EP0R, CTR_RX: 1, EP_TYPE: ep_type, CTR_TX: 0, EA: ea);
@@ -446,9 +476,22 @@ impl Endpoint for ControlEndpoint {
 
     /// Enqueue a slice of up to 64 bytes of data for transmission.
     fn transmit_slice(&mut self, usb: &usb::Instance, data: &[u8]) {
-        assert!(data.len() <= 64);
-        self.epbuf.write_tx(data);
-        self.btable.tx_count(data.len());
+        assert!(data.len() <= 320);
+        if data.len() < 64 {
+            // For packets less than the maximum packet size, we can immediately
+            // send the entire packet.
+            self.epbuf.write_tx(data);
+            self.btable.tx_count(data.len());
+        } else {
+            // For packets equal to the maximum packet size, we need to send
+            // a zero-length-packet afterwards. For packets greater, we store
+            // the remaining data for later transmission.
+            self.epbuf.write_tx(&data[..64]);
+            self.btable.tx_count(64);
+            let leftover = data.len() - 64;
+            self.pending_tx_buf[..leftover].copy_from_slice(&data[64..]);
+            self.pending_tx = Some((0, data.len() - 64));
+        }
         self.tx_valid(usb);
     }
 
