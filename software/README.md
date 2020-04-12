@@ -3,22 +3,35 @@
 The control software for FFP runs on your computer and uses the FFP hardware to
 program an FPGA or SPI flash. It is written in Rust.
 
+## Requirements
+
+* You must have a working Rust compiler installed. Visit
+[rustup.rs](https://rustup.rs) to install Rust.
+
+* You must have libusb installed. On Ubuntu, `sudo apt install libusb-dev`. On
+  Windows, prebuilt DLLs are available from
+  [libusb](https://github.com/libusb/libusb/releases).
+
+* You'll need to set up drivers or permissions to access the USB device, see
+  the [drivers page](/driver/) for more details.
+
+
 ## Building
 
 ```
 cargo build --release
 ```
 
+You can either run the ffp executable directly from `target/release/ffp`, or
+install it for your user using `cargo install --path .`.
+
 ## Installing
 
-FFP software can be installed using Cargo:
+FFP software can be installed directly using Cargo:
 
 ```
 cargo install ffp
 ```
-
-You'll need to set up permissions to access the USB device, see the [drivers
-file](/driver/) for more details.
 
 ## Usage
 
