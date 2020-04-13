@@ -187,11 +187,8 @@ impl ControlEndpoint {
     /// Transmit CONFIGURATION, INTERFACE, and all ENDPOINT descriptors
     fn process_get_configuration_descriptor(&mut self, usb: &usb::Instance, w_length: u16) {
         // We need to first copy all the descriptors into a single buffer,
-        // as they are not u16-aligned. Helpfully our descriptors add up
-        // to exactly 64 bytes, the maximum we can send in one transfer.
-        // Previously this code implemented multiple transfers for larger
-        // descriptors but it's no longer required.
-        let mut buf = [0u8; 64];
+        // as they are not u16-aligned.
+        let mut buf = [0u8; 128];
         let mut n = 0;
 
         // Copy CONFIGURATION_DESCRIPTOR into buf
@@ -214,20 +211,34 @@ impl ControlEndpoint {
             n += len;
         }
 
-        // Copy DAP_INTERFACE_DESCRIPTOR into buf
-        let len = DAP_INTERFACE_DESCRIPTOR.bLength as usize;
-        let data = DAP_INTERFACE_DESCRIPTOR.to_bytes();
+        // Copy DAP1_INTERFACE_DESCRIPTOR into buf
+        let len = DAP1_INTERFACE_DESCRIPTOR.bLength as usize;
+        let data = DAP1_INTERFACE_DESCRIPTOR.to_bytes();
         buf[n..n+len].copy_from_slice(data);
         n += len;
 
-        // Copy DAP_HID_DESCRIPTOR into buf
-        let len = DAP_HID_DESCRIPTOR.bLength as usize;
-        let data = DAP_HID_DESCRIPTOR.to_bytes();
+        // Copy DAP1_HID_DESCRIPTOR into buf
+        let len = DAP1_HID_DESCRIPTOR.bLength as usize;
+        let data = DAP1_HID_DESCRIPTOR.to_bytes();
         buf[n..n+len].copy_from_slice(data);
         n += len;
 
-        // Copy all DAP_ENDPOINT_DESCRIPTORS into buf
-        for ep in DAP_ENDPOINT_DESCRIPTORS.iter() {
+        // Copy all DAP1_ENDPOINT_DESCRIPTORS into buf
+        for ep in DAP1_ENDPOINT_DESCRIPTORS.iter() {
+            let len = ep.bLength as usize;
+            let data = ep.to_bytes();
+            buf[n..n+len].copy_from_slice(data);
+            n += len;
+        }
+
+        // Copy DAP2_INTERFACE_DESCRIPTOR into buf
+        let len = DAP2_INTERFACE_DESCRIPTOR.bLength as usize;
+        let data = DAP2_INTERFACE_DESCRIPTOR.to_bytes();
+        buf[n..n+len].copy_from_slice(data);
+        n += len;
+
+        // Copy all DAP2_ENDPOINT_DESCRIPTORS into buf
+        for ep in DAP2_ENDPOINT_DESCRIPTORS.iter() {
             let len = ep.bLength as usize;
             let data = ep.to_bytes();
             buf[n..n+len].copy_from_slice(data);
@@ -264,15 +275,17 @@ impl ControlEndpoint {
                 desc
             },
 
-            // Handle manufacturer, product, serial number, and interface strings
-            1..=5 => {
+            // Handle manufacturer, product, serial number, interface, and MOS string
+            1..=6 | 0xEE => {
                 let id;
                 let string = match idx {
                     1 => Ok(STRING_MFN),
                     2 => Ok(STRING_PRD),
                     3 => { id = get_hex_id(); core::str::from_utf8(&id) },
                     4 => Ok(STRING_IF_SPI),
-                    5 => Ok(STRING_IF_DAP),
+                    5 => Ok(STRING_IF_DAP1),
+                    6 => Ok(STRING_IF_DAP2),
+                    0xEE => Ok(STRING_MOS),
                     _ => unreachable!(),
                 };
                 let string = match string {
@@ -287,7 +300,7 @@ impl ControlEndpoint {
                     bDescriptorType: DescriptorType::String as u8,
                     bString: [0u8; 62],
                 };
-                // Encode the &str to an iter of u16 and pack them
+                // Encode the &str to an iter of UTF-16 and pack them
                 for (idx, cp) in string.encode_utf16().enumerate() {
                     let [u1, u2] = cp.to_le_bytes();
                     desc.bString[idx*2  ] = u1;
@@ -311,7 +324,7 @@ impl ControlEndpoint {
     /// Transmit a HID REPORT descriptor
     fn process_get_hid_report_descriptor(&mut self, usb: &usb::Instance, w_length: u16, idx: u8) {
         let report = match idx {
-            0 => &DAP_HID_REPORT[..],
+            0 => &DAP1_HID_REPORT[..],
             _ => {
                 self.stall(usb);
                 return;
@@ -409,6 +422,40 @@ impl ControlEndpoint {
                 self.pending_request = Some(
                     USBStackRequest::AppRequestAndDetach(Request::Bootload));
                 self.transmit_ack(usb);
+                None
+            },
+
+            Ok(VendorRequest::GetOSFeature) => {
+                match OSFeatureDescriptorType::try_from(setup.wIndex) {
+                    Ok(OSFeatureDescriptorType::CompatibleID) => {
+                        // Handle request for an Extended Compatible ID Descriptor.
+                        // Interface number is ignored as there is only one device-wide
+                        // Compatible ID Descriptor.
+                        let descriptor = &MS_COMPATIBLE_ID_DESCRIPTOR;
+                        let n = u32::min(descriptor.dwLength, setup.wLength as u32) as usize;
+                        let data = descriptor.to_bytes();
+                        self.transmit_slice(usb, &data[..n]);
+                    },
+                    Ok(OSFeatureDescriptorType::Properties) => {
+                        // Handle request for an Extended Properties OS Descriptor.
+                        let iface = setup.wValue as u8;
+                        match iface {
+                            2 => {
+                                let descriptor = &IF2_MS_PROPERTIES_OS_DESCRIPTOR;
+                                let n = usize::min(descriptor.len(), setup.wLength as usize);
+                                let mut buf = [0u8; 192];
+                                descriptor.write_to_buf(&mut buf[..]);
+                                self.transmit_slice(usb, &buf[..n]);
+                            },
+                            _ => {
+                                self.stall(usb);
+                            },
+                        }
+                    },
+                    _ => {
+                        self.stall(usb);
+                    },
+                }
                 None
             },
 

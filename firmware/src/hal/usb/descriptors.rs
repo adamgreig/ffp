@@ -8,7 +8,9 @@ pub static STRING_LANGS: [u16; 1] = [0x0409];
 pub static STRING_MFN: &str = "AGG";
 pub static STRING_PRD: &str = "FFP r1 with CMSIS-DAP Support";
 pub static STRING_IF_SPI: &str = "FFP SPI Interface";
-pub static STRING_IF_DAP: &str = "FFP CMSIS-DAP v1 SWD Interface";
+pub static STRING_IF_DAP1: &str = "FFP CMSIS-DAP v1 Interface";
+pub static STRING_IF_DAP2: &str = "FFP CMSIS-DAP v2 Interface";
+pub static STRING_MOS: &str = "MSFT100A";
 
 // Assigned by http://pid.codes/1209/FF50/
 const VENDOR_ID: u16 = 0x1209;
@@ -38,10 +40,12 @@ pub static CONFIGURATION_DESCRIPTOR: ConfigurationDescriptor = ConfigurationDesc
     wTotalLength: (size_of::<ConfigurationDescriptor>() +
                    SPI_INTERFACE_DESCRIPTOR.bLength as usize +
                    size_of::<[EndpointDescriptor; SPI_NUM_ENDPOINTS]>() +
-                   DAP_INTERFACE_DESCRIPTOR.bLength as usize +
-                   DAP_HID_DESCRIPTOR.bLength as usize +
-                   size_of::<[EndpointDescriptor; DAP_NUM_ENDPOINTS]>()) as u16,
-    bNumInterfaces: 2,
+                   DAP1_INTERFACE_DESCRIPTOR.bLength as usize +
+                   DAP1_HID_DESCRIPTOR.bLength as usize +
+                   size_of::<[EndpointDescriptor; DAP1_NUM_ENDPOINTS]>() +
+                   DAP2_INTERFACE_DESCRIPTOR.bLength as usize +
+                   size_of::<[EndpointDescriptor; DAP2_NUM_ENDPOINTS]>()) as u16,
+    bNumInterfaces: 3,
     bConfigurationValue: 1,
     iConfiguration: 0,
     bmAttributes: 0b1000_0000,
@@ -83,7 +87,7 @@ pub static SPI_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; SPI_NUM_ENDPOINTS] = [
     },
 ];
 
-pub static DAP_INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor {
+pub static DAP1_INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor {
     bLength: size_of::<InterfaceDescriptor>() as u8,
     bDescriptorType: DescriptorType::Interface as u8,
     bInterfaceNumber: 1,
@@ -95,18 +99,18 @@ pub static DAP_INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor {
     iInterface: 5,
 };
 
-pub static DAP_HID_DESCRIPTOR: HIDDescriptor = HIDDescriptor {
+pub static DAP1_HID_DESCRIPTOR: HIDDescriptor = HIDDescriptor {
     bLength: size_of::<HIDDescriptor>() as u8,
     bDescriptorType: DescriptorType::HID as u8,
     bcdHID: 0x0111,
     bCountryCode: 0x00,
     bNumDescriptors: 1,
     bSubDescriptorType: DescriptorType::HIDReport as u8,
-    wSubDescriptorLength: DAP_HID_REPORT_LENGTH as u16,
+    wSubDescriptorLength: DAP1_HID_REPORT_LENGTH as u16,
 };
 
-pub const DAP_HID_REPORT_LENGTH: usize = 32;
-pub static DAP_HID_REPORT: [u8; DAP_HID_REPORT_LENGTH] = [
+pub const DAP1_HID_REPORT_LENGTH: usize = 32;
+pub static DAP1_HID_REPORT: [u8; DAP1_HID_REPORT_LENGTH] = [
     0x06, 0x00, 0xFF,           // GLOBAL Usage Page    0xFF00: Vendor Defined
     0x09, 0x01,                 // LOCAL  Usage         0x01: Vendor Usage 1
     0xA1, 0x01,                 // MAIN   Collection    0x01: Application
@@ -128,8 +132,8 @@ pub static DAP_HID_REPORT: [u8; DAP_HID_REPORT_LENGTH] = [
     0xC0,                       // MAIN   End Collection
 ];
 
-const DAP_NUM_ENDPOINTS: usize = 2;
-pub static DAP_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP_NUM_ENDPOINTS] = [
+const DAP1_NUM_ENDPOINTS: usize = 2;
+pub static DAP1_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP1_NUM_ENDPOINTS] = [
     // EP2 IN, INTERRUPT
     EndpointDescriptor {
         bLength: size_of::<EndpointDescriptor>() as u8,
@@ -151,3 +155,77 @@ pub static DAP_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP_NUM_ENDPOINTS] = [
     },
 ];
 
+pub static DAP2_INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor {
+    bLength: size_of::<InterfaceDescriptor>() as u8,
+    bDescriptorType: DescriptorType::Interface as u8,
+    bInterfaceNumber: 2,
+    bAlternateSetting: 0,
+    bNumEndpoints: 2,
+    bInterfaceClass: 0xFF,
+    bInterfaceSubClass: 0,
+    bInterfaceProtocol: 0,
+    iInterface: 6,
+};
+
+const DAP2_NUM_ENDPOINTS: usize = 2;
+pub static DAP2_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP2_NUM_ENDPOINTS] = [
+    // EP3 OUT, BULK
+    EndpointDescriptor {
+        bLength: size_of::<EndpointDescriptor>() as u8,
+        bDescriptorType: DescriptorType::Endpoint as u8,
+        bEndpointAddress: 0b0_000_0011,
+        bmAttributes: 0b00_00_00_10,
+        wMaxPacketSize: 64,
+        bInterval: 10,
+    },
+
+    // EP3 IN, BULK
+    EndpointDescriptor {
+        bLength: size_of::<EndpointDescriptor>() as u8,
+        bDescriptorType: DescriptorType::Endpoint as u8,
+        bEndpointAddress: 0b1_000_0011,
+        bmAttributes: 0b00_00_00_10,
+        wMaxPacketSize: 64,
+        bInterval: 10,
+    },
+];
+
+const MS_COMPATIBLE_ID_WINUSB: [u8; 8] = [
+    'W' as u8, 'I' as u8, 'N' as u8, 'U' as u8, 'S' as u8, 'B' as u8, 0, 0];
+
+pub static MS_COMPATIBLE_ID_DESCRIPTOR: MSCompatibleIDDescriptor = MSCompatibleIDDescriptor {
+    dwLength: size_of::<MSCompatibleIDDescriptor>() as u32,
+    bcdVersion: 0x0100,
+    wIndex: OSFeatureDescriptorType::CompatibleID as u16,
+    bNumSections: 2,
+    _rsvd0: [0; 7],
+    features: [
+        MSCompatibleIDDescriptorFunction {
+            bInterfaceNumber: 0,
+            _rsvd0: 0,
+            sCompatibleID: MS_COMPATIBLE_ID_WINUSB,
+            sSubCompatibleID: [0u8; 8],
+            _rsvd1: [0u8; 6],
+        },
+        MSCompatibleIDDescriptorFunction {
+            bInterfaceNumber: 2,
+            _rsvd0: 0,
+            sCompatibleID: MS_COMPATIBLE_ID_WINUSB,
+            sSubCompatibleID: [0u8; 8],
+            _rsvd1: [0u8; 6],
+        },
+    ],
+};
+
+pub static IF2_MS_PROPERTIES_OS_DESCRIPTOR: MSPropertiesOSDescriptor = MSPropertiesOSDescriptor {
+    bcdVersion: 0x0100,
+    wIndex: OSFeatureDescriptorType::Properties as u16,
+    wCount: 1,
+    features: [
+        MSPropertiesOSDescriptorFeature {
+            dwPropertyDataType: MSPropertyDataType::REG_SZ as u32,
+            bPropertyName: "DeviceInterfaceGUID\x00",
+            bPropertyData: "{CDB3B5AD-293B-4663-AA36-1AAE46463776}\x00",
+        }
+    ],
+};

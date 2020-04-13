@@ -42,6 +42,7 @@ pub enum VendorRequest {
     GetTPwr = 5,
     SetLED = 6,
     Bootload = 7,
+    GetOSFeature = 'A' as u8,
 }
 
 #[derive(TryFromPrimitive)]
@@ -139,6 +140,65 @@ pub struct HIDDescriptor {
     pub wSubDescriptorLength: u16,
 }
 
+#[allow(non_snake_case)]
+#[repr(C)]
+#[repr(packed)]
+pub struct MSCompatibleIDDescriptor {
+    pub dwLength: u32,
+    pub bcdVersion: u16,
+    pub wIndex: u16,
+    pub bNumSections: u8,
+    pub _rsvd0: [u8; 7],
+    pub features: [MSCompatibleIDDescriptorFunction; 2],
+}
+
+#[allow(non_snake_case)]
+#[repr(C)]
+#[repr(packed)]
+pub struct MSCompatibleIDDescriptorFunction {
+    pub bInterfaceNumber: u8,
+    pub _rsvd0: u8,
+    pub sCompatibleID: [u8; 8],
+    pub sSubCompatibleID: [u8; 8],
+    pub _rsvd1: [u8; 6],
+}
+
+#[allow(non_snake_case)]
+pub struct MSPropertiesOSDescriptor {
+    pub bcdVersion: u16,
+    pub wIndex: u16,
+    pub wCount: u16,
+    pub features: [MSPropertiesOSDescriptorFeature; 1],
+}
+
+#[allow(non_snake_case)]
+pub struct MSPropertiesOSDescriptorFeature {
+    pub dwPropertyDataType: u32,
+    pub bPropertyName: &'static str,
+    pub bPropertyData: &'static str,
+}
+
+#[allow(non_snake_case)]
+#[repr(u16)]
+#[derive(TryFromPrimitive)]
+pub enum OSFeatureDescriptorType {
+    CompatibleID    = 4,
+    Properties      = 5,
+}
+
+#[allow(non_camel_case_types)]
+#[allow(unused)]
+#[repr(u32)]
+pub enum MSPropertyDataType {
+    REG_SZ                      = 1,
+    REG_EXPAND_SZ               = 2,
+    REG_BINARY                  = 3,
+    REG_DWORD_LITTLE_ENDIAN     = 4,
+    REG_DWORD_BIG_ENDIAN        = 5,
+    REG_LINK                    = 6,
+    REG_MULTI_SZ                = 7,
+}
+
 #[derive(TryFromPrimitive)]
 #[repr(u8)]
 #[allow(unused)]
@@ -217,3 +277,80 @@ unsafe impl ToBytes for InterfaceDescriptor {}
 unsafe impl ToBytes for EndpointDescriptor {}
 unsafe impl ToBytes for StringDescriptor {}
 unsafe impl ToBytes for HIDDescriptor {}
+unsafe impl ToBytes for MSCompatibleIDDescriptor {}
+
+impl MSPropertiesOSDescriptor {
+    /// Retrieve the total length of a MSPropertiesOSDescriptor,
+    /// including the length of variable string contents once UTF-16 encoded.
+    pub fn len(&self) -> usize {
+        // Header section
+        let mut len = 10;
+
+        for feature in self.features.iter() {
+            len += feature.len();
+        }
+
+        len
+    }
+
+    /// Write descriptor contents into a provided &mut [u8], which must
+    /// be at least self.len() long.
+    pub fn write_to_buf(&self, buf: &mut [u8]) {
+        let len = self.len() as u32;
+        buf[0..4].copy_from_slice(&len.to_le_bytes());
+        buf[4..6].copy_from_slice(&self.bcdVersion.to_le_bytes());
+        buf[6..8].copy_from_slice(&self.wIndex.to_le_bytes());
+        buf[8..10].copy_from_slice(&self.wCount.to_le_bytes());
+        let mut i = 10;
+
+        for feature in self.features.iter() {
+            feature.write_to_buf(&mut buf[i..]);
+            i += feature.len();
+        }
+    }
+}
+
+impl MSPropertiesOSDescriptorFeature {
+    pub fn len(&self) -> usize {
+        // Fixed length parts of feature
+        let mut len = 14;
+
+        // String parts
+        len += self.name_len();
+        len += self.data_len();
+
+        len
+    }
+
+    fn name_len(&self) -> usize {
+        self.bPropertyName.encode_utf16().count() * 2
+    }
+
+    fn data_len(&self) -> usize {
+        self.bPropertyData.encode_utf16().count() * 2
+    }
+
+    pub fn write_to_buf(&self, buf: &mut [u8]) {
+        let len = self.len() as u32;
+        let name_len = self.name_len() as u16;
+        let data_len = self.data_len() as u32;
+        buf[0..4].copy_from_slice(&len.to_le_bytes());
+        buf[4..8].copy_from_slice(&self.dwPropertyDataType.to_le_bytes());
+        buf[8..10].copy_from_slice(&name_len.to_le_bytes());
+        let mut i = 10;
+        for cp in self.bPropertyName.encode_utf16() {
+            let [u1, u2] = cp.to_le_bytes();
+            buf[i  ] = u1;
+            buf[i+1] = u2;
+            i += 2;
+        }
+        buf[i..i+4].copy_from_slice(&data_len.to_le_bytes());
+        i += 4;
+        for cp in self.bPropertyData.encode_utf16() {
+            let [u1, u2] = cp.to_le_bytes();
+            buf[i  ] = u1;
+            buf[i+1] = u2;
+            i += 2;
+        }
+    }
+}
