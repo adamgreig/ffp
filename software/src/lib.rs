@@ -11,7 +11,7 @@ pub use fpga::FPGA;
 #[derive(Fail, Debug)]
 pub enum FFPError {
     #[fail(display="USB error: {}", _0)]
-    USBError(#[cause] libusb::Error),
+    USBError(#[cause] rusb::Error),
 
     #[fail(display="No FFP device found")]
     NoDeviceFound,
@@ -32,8 +32,8 @@ pub enum FFPError {
     UnknownError,
 }
 
-impl From<libusb::Error> for FFPError {
-    fn from(error: libusb::Error) -> Self {
+impl From<rusb::Error> for FFPError {
+    fn from(error: rusb::Error) -> Self {
         FFPError::USBError(error)
     }
 }

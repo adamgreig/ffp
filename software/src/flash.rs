@@ -45,7 +45,7 @@ impl std::fmt::Display for FlashID {
 
 /// Flash manager
 pub struct Flash<'a> {
-    programmer: &'a Programmer<'a>,
+    programmer: &'a Programmer,
 }
 
 impl<'a> Flash<'a> {

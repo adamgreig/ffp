@@ -8,10 +8,6 @@ program an FPGA or SPI flash. It is written in Rust.
 * You must have a working Rust compiler installed. Visit
 [rustup.rs](https://rustup.rs) to install Rust.
 
-* You must have libusb installed. On Ubuntu, `sudo apt install libusb-dev`. On
-  Windows, prebuilt DLLs are available from
-  [libusb](https://github.com/libusb/libusb/releases).
-
 * You'll need to set up drivers or permissions to access the USB device, see
   the [drivers page](/driver/) for more details.
 

@@ -8,7 +8,7 @@ use ffp::{Programmer, Flash, FPGA};
 fn main() -> ffp::Result<()> {
     let matches = App::new("ffp fpga/flash programmer")
         .version(crate_version!())
-        .author(crate_authors!("\n"))
+        .author(crate_authors!())
         .about(crate_description!())
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .global_setting(AppSettings::ColoredHelp)
@@ -89,7 +89,7 @@ fn main() -> ffp::Result<()> {
         .get_matches();
 
     let t0 = Instant::now();
-    let context = libusb::Context::new().expect("Error getting libusb context");
+    let context = rusb::Context::new().expect("Error getting rusb context");
     let quiet = matches.is_present("quiet");
 
     // Special-case devices which does not need a programmer

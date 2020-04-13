@@ -1,4 +1,5 @@
 use std::time::Duration;
+use rusb::UsbContext;
 use failure::ResultExt;
 use crate::{FFPError, Result};
 
@@ -22,11 +23,11 @@ enum Mode {
 }
 
 /// Interface to FFP hardware
-pub struct Programmer<'a> {
-    handle: libusb::DeviceHandle<'a>,
+pub struct Programmer {
+    handle: rusb::DeviceHandle<rusb::Context>,
 }
 
-impl <'a> Programmer<'a> {
+impl Programmer {
     const ID_VENDOR: u16        = 0x1209;
     const ID_PRODUCT: u16       = 0xff50;
     const REQUEST_TYPE_SET: u8  = 2 << 5;
@@ -37,7 +38,7 @@ impl <'a> Programmer<'a> {
     /// Create a new `Programmer` using the provided `DeviceHandle`.
     ///
     /// Turns on the FFP LED.
-    pub fn from_handle(mut handle: libusb::DeviceHandle<'a>) -> Result<Self> {
+    pub fn from_handle(mut handle: rusb::DeviceHandle<rusb::Context>) -> Result<Self> {
         handle.claim_interface(0).context("Error claiming interface")?;
         let programmer = Self { handle };
         programmer.led_on()?;
@@ -45,13 +46,13 @@ impl <'a> Programmer<'a> {
     }
 
     /// Get a list of all attached FFP serial numbers
-    pub fn get_serials(context: &'a libusb::Context) -> Result<Vec<String>> {
+    pub fn get_serials(context: &rusb::Context) -> Result<Vec<String>> {
         let devices = Self::enumerate_devices(context)?;
         Ok(devices.iter().map(|(_, serial)| serial.clone()).collect())
     }
 
     /// Create a new `Programmer` by finding an attached FFP on the USB bus
-    pub fn find(context: &'a libusb::Context) -> Result<Self> {
+    pub fn find(context: &rusb::Context) -> Result<Self> {
         let devices = Self::enumerate_devices(context)?;
         match devices.len() {
             0 => Err(FFPError::NoDeviceFound)?,
@@ -70,7 +71,7 @@ impl <'a> Programmer<'a> {
     }
 
     /// Create a new `Programmer` by finding the specific FFP with given serial number
-    pub fn by_serial(context: &'a libusb::Context, serial: &str) -> Result<Self> {
+    pub fn by_serial(context: &rusb::Context, serial: &str) -> Result<Self> {
         let devices = Self::enumerate_devices(context)?;
         for (device, device_serial) in devices {
             if device_serial == serial {
@@ -82,7 +83,7 @@ impl <'a> Programmer<'a> {
     }
 
     /// Create a new `Programmer` by indexing the list of all found FFP devices
-    pub fn by_index(context: &'a libusb::Context, index: usize) -> Result<Self> {
+    pub fn by_index(context: &rusb::Context, index: usize) -> Result<Self> {
         let devices = Self::enumerate_devices(context)?;
         if index < devices.len() {
             let handle = devices[index].0.open().context("Error opening device")?;
@@ -185,7 +186,9 @@ impl <'a> Programmer<'a> {
     }
 
     /// Return a list of all discovered FFP devices (by vendor and product ID)
-    fn enumerate_devices(context: &'a libusb::Context) -> Result<Vec<(libusb::Device, String)>> {
+    fn enumerate_devices(context: &rusb::Context) ->
+        Result<Vec<(rusb::Device<rusb::Context>, String)>>
+    {
         let timeout = Duration::from_millis(100);
         let mut devices = Vec::new();
         for device in context.devices().context("Error getting devices")?.iter() {
@@ -201,7 +204,7 @@ impl <'a> Programmer<'a> {
     }
 }
 
-impl<'a> Drop for Programmer<'a> {
+impl Drop for Programmer {
     /// When dropped, go to high-z mode and turn off the FFP LED
     fn drop(&mut self) {
         self.high_z_mode().ok();

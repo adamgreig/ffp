@@ -5,7 +5,7 @@ use crate::{Programmer, Flash, Result};
 
 /// FPGA manager
 pub struct FPGA<'a> {
-    programmer: &'a Programmer<'a>,
+    programmer: &'a Programmer,
 }
 
 impl<'a> FPGA<'a> {
