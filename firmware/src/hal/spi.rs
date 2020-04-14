@@ -75,12 +75,14 @@ impl SPI {
                    FRXTH: Quarter, DS: EightBit, TXDMAEN: Enabled, RXDMAEN: Enabled);
     }
 
-    /// Set up SPI peripheral for SWD mode
+    /// Set up SPI peripheral for SWD mode.
+    ///
+    /// Defaults to 1.5MHz clock which should be slow enough to work on most targets.
     pub fn setup_swd(&self) {
         write_reg!(spi, self.spi, CR1,
                    BIDIMODE: Unidirectional, CRCEN: Disabled, RXONLY: FullDuplex,
                    SSM: Enabled, SSI: SlaveNotSelected, LSBFIRST: LSBFirst,
-                   BR: Div128, MSTR: Master, CPOL: IdleHigh, CPHA: SecondEdge,
+                   BR: Div32, MSTR: Master, CPOL: IdleHigh, CPHA: SecondEdge,
                    SPE: Enabled);
     }
 
