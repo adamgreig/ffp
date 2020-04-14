@@ -589,46 +589,63 @@ impl <'a> DAP<'a> {
         resp.write_u16(0);
         resp.write_u8(0);
 
-        for transfer_idx in 0..ntransfers {
-            // Store how many transfers we execute in the response
-            resp.write_u16_at(1, transfer_idx + 1);
+        // Keep track of how many transfers we executed,
+        // so if there is an error the host knows where
+        // it happened.
+        let mut transfers = 0;
 
+        // If reading an AP register, post first read early.
+        if rnw && apndp {
+            if self.swd.read_ap(a).check(resp.mut_at(3)).is_none() {
+                // Quit early on error
+                resp.write_u16_at(1, 1);
+                return Some(resp);
+            }
+        }
+
+        for transfer_idx in 0..ntransfers {
+            transfers = transfer_idx;
             if rnw {
-                // Issue register read
+                // Handle repeated reads
                 let read_value = if apndp {
-                    // Reads from AP are posted, so we issue the
-                    // read and subsequently read RDBUFF for the data.
-                    // This requires an additional transfer so we'd
-                    // ideally keep track of posted reads and just
-                    // keep issuing new AP reads, but our reads are
-                    // suffiently fast that for now this is simpler.
-                    let rdbuff = swd::DPRegister::RDBUFF.into();
-                    if self.swd.read_ap(a).check(resp.mut_at(3)).is_none() {
-                        break;
-                    }
-                    match self.swd.read_dp(rdbuff).check(resp.mut_at(3)) {
-                        Some(v) => v,
-                        None => break,
+                    // For AP reads, the first read was posted, so on the final
+                    // read we need to read RDBUFF instead of the AP register.
+                    if transfer_idx < ntransfers - 1 {
+                        match self.swd.read_ap(a).check(resp.mut_at(3)) {
+                            Some(v) => v,
+                            None => break,
+                        }
+                    } else {
+                        let rdbuff = swd::DPRegister::RDBUFF.into();
+                        match self.swd.read_dp(rdbuff).check(resp.mut_at(3)) {
+                            Some(v) => v,
+                            None => break,
+                        }
                     }
                 } else {
-                    // Reads from DP are not posted, so directly read the register.
+                    // For DP reads, no special care required
                     match self.swd.read_dp(a).check(resp.mut_at(3)) {
                         Some(v) => v,
                         None => break,
                     }
                 };
 
-                // Save read register value
+                // Save read register value to response
                 resp.write_u32(read_value);
             } else {
-                // Handle writing to a register
+                // Handle repeated register writes
                 let write_value = req.next_u32();
-                if self.swd.write(apndp.into(), a, write_value).check(resp.mut_at(3)).is_none() {
+                let result = self.swd.write(apndp.into(), a, write_value);
+                if result.check(resp.mut_at(3)).is_none() {
                     break;
                 }
             }
         }
 
+        // Write number of transfers to response
+        resp.write_u16_at(1, transfers + 1);
+
+        // Return our response data
         Some(resp)
     }
 
