@@ -34,6 +34,10 @@ pub static mut EP1BUF: EPBuf = EPBuf::new();
 #[link_section=".usbram"]
 pub static mut EP2BUF: EPBuf = EPBuf::new();
 
+/// Global buffer for EP3, stored in USB SRAM
+#[link_section=".usbram"]
+pub static mut EP3BUF: EPBuf = EPBuf::new();
+
 /// Global buffer table descriptors, stored in USB SRAM
 #[link_section=".usbram"]
 pub static mut BTABLE: [BTableRow; 8] = [BTableRow::new(); 8];

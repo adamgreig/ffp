@@ -30,7 +30,8 @@ pub enum Request {
     Bootload,
     Suspend,
     SPITransmit(([u8; 64], usize)),
-    DAPCommand(([u8; 64], usize)),
+    DAP1Command(([u8; 64], usize)),
+    DAP2Command(([u8; 64], usize)),
 }
 
 pub struct App<'a> {
@@ -113,10 +114,16 @@ impl<'a> App<'a> {
                 self.spi.exchange(&self.dma, &txdata[..n], &mut rxdata);
                 self.usb.spi_data_reply(&rxdata[..n]);
             },
-            Request::DAPCommand((report, n)) => {
+            Request::DAP1Command((report, n)) => {
                 let response = self.dap.process_command(&report[..n]);
                 if let Some(data) = response {
-                    self.usb.dap_reply(data);
+                    self.usb.dap1_reply(data);
+                }
+            },
+            Request::DAP2Command((report, n)) => {
+                let response = self.dap.process_command(&report[..n]);
+                if let Some(data) = response {
+                    self.usb.dap2_reply(data);
                 }
             },
             Request::GetTPwr => self.usb.tpwr_reply(self.pins.tpwr_det.get_state()),

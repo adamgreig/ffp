@@ -12,11 +12,13 @@ mod descriptors;
 
 mod control_endpoint;
 mod spi_endpoint;
-mod dap_endpoint;
+mod dap1_endpoint;
+mod dap2_endpoint;
 
 use control_endpoint::ControlEndpoint;
 use spi_endpoint::SPIEndpoint;
-use dap_endpoint::DAPEndpoint;
+use dap1_endpoint::DAP1Endpoint;
+use dap2_endpoint::DAP2Endpoint;
 
 use buffers::*;
 
@@ -25,7 +27,8 @@ pub struct USB {
     usb: usb::Instance,
     ctl_endpoint: ControlEndpoint,
     spi_endpoint: SPIEndpoint,
-    dap_endpoint: DAPEndpoint,
+    dap1_endpoint: DAP1Endpoint,
+    dap2_endpoint: DAP2Endpoint,
 }
 
 trait Endpoint {
@@ -60,7 +63,8 @@ impl USB {
                 usb,
                 ctl_endpoint: ControlEndpoint::new(&mut EP0BUF, &mut BTABLE[0]),
                 spi_endpoint: SPIEndpoint::new(&mut EP1BUF, &mut BTABLE[1]),
-                dap_endpoint: DAPEndpoint::new(&mut EP2BUF, &mut BTABLE[2]),
+                dap1_endpoint: DAP1Endpoint::new(&mut EP2BUF, &mut BTABLE[2]),
+                dap2_endpoint: DAP2Endpoint::new(&mut EP3BUF, &mut BTABLE[3]),
             }
         }
     }
@@ -122,7 +126,8 @@ impl USB {
             let ep_req = match ep_id {
                 0 => self.ctl_endpoint.process_transfer(&self.usb),
                 1 => self.spi_endpoint.process_transfer(&self.usb),
-                2 => self.dap_endpoint.process_transfer(&self.usb),
+                2 => self.dap1_endpoint.process_transfer(&self.usb),
+                3 => self.dap2_endpoint.process_transfer(&self.usb),
                 _ => None,
             };
 
@@ -179,19 +184,26 @@ impl USB {
         self.spi_endpoint.rx_stall(&self.usb);
     }
 
-    /// Transmit a DAP report
-    pub fn dap_reply(&mut self, data: &[u8]) {
-        self.dap_endpoint.transmit_slice(&self.usb, data);
+    /// Transmit a DAP report back over the DAPv1 HID interface
+    pub fn dap1_reply(&mut self, data: &[u8]) {
+        self.dap1_endpoint.transmit_slice(&self.usb, data);
+    }
+
+    /// Transmit a DAP report back over the DAPv2 bulk interface
+    pub fn dap2_reply(&mut self, data: &[u8]) {
+        self.dap2_endpoint.transmit_slice(&self.usb, data);
     }
 
     /// Indicate we can currently receive DAP requests
     pub fn dap_enable(&mut self) {
-        self.dap_endpoint.rx_valid(&self.usb);
+        self.dap1_endpoint.rx_valid(&self.usb);
+        self.dap2_endpoint.rx_valid(&self.usb);
     }
 
     /// Indicate we cannot currently receive DAP requests
     pub fn dap_disable(&mut self) {
-        self.dap_endpoint.rx_stall(&self.usb);
+        self.dap1_endpoint.rx_stall(&self.usb);
+        self.dap2_endpoint.rx_stall(&self.usb);
     }
 
     /// Apply the power-on reset sequence
@@ -210,7 +222,8 @@ impl USB {
         // Write the buffer table descriptors
         self.ctl_endpoint.write_btable();
         self.spi_endpoint.write_btable();
-        self.dap_endpoint.write_btable();
+        self.dap1_endpoint.write_btable();
+        self.dap2_endpoint.write_btable();
         // Set buffer table to start at BTABLE.
         // We write the entire register to avoid dealing with the shifted-by-3 field.
         write_reg!(usb, self.usb, BTABLE,
@@ -235,12 +248,10 @@ impl USB {
         // Set endpoints to reset state
         self.ctl_endpoint.reset_endpoint(&self.usb);
         self.spi_endpoint.reset_endpoint(&self.usb);
-        self.dap_endpoint.reset_endpoint(&self.usb);
+        self.dap1_endpoint.reset_endpoint(&self.usb);
+        self.dap2_endpoint.reset_endpoint(&self.usb);
 
         // Ensure all other endpoints are disabled
-        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP3R, STAT_TX, STAT_RX);
-        write_reg!(usb, self.usb, EP3R,
-                   STAT_TX: stat_disabled(stat_tx), STAT_RX: stat_disabled(stat_rx));
         let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP4R, STAT_TX, STAT_RX);
         write_reg!(usb, self.usb, EP4R,
                    STAT_TX: stat_disabled(stat_tx), STAT_RX: stat_disabled(stat_rx));
@@ -284,12 +295,11 @@ impl USB {
         // Configure our known endpoints
         self.ctl_endpoint.configure_endpoint(&self.usb);
         self.spi_endpoint.configure_endpoint(&self.usb);
-        self.dap_endpoint.configure_endpoint(&self.usb);
+        self.dap1_endpoint.configure_endpoint(&self.usb);
+        self.dap2_endpoint.configure_endpoint(&self.usb);
 
         // Ensure all other endpoints are disabled by writing their current
         // values of STAT_TX/STAT_RX, setting them to 00 (disabled)
-        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP3R, STAT_TX, STAT_RX);
-        write_reg!(usb, self.usb, EP3R, STAT_TX: stat_tx, STAT_RX: stat_rx);
         let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP4R, STAT_TX, STAT_RX);
         write_reg!(usb, self.usb, EP4R, STAT_TX: stat_tx, STAT_RX: stat_rx);
         let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP5R, STAT_TX, STAT_RX);

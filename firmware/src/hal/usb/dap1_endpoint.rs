@@ -10,12 +10,12 @@ use super::buffers::*;
 use crate::app::Request;
 
 /// USB handling code for DAP endpoint
-pub(super) struct DAPEndpoint {
+pub(super) struct DAP1Endpoint {
     epbuf: &'static mut EPBuf,
     btable: &'static mut BTableRow,
 }
 
-impl DAPEndpoint {
+impl DAP1Endpoint {
     /// Process a complete received transaction.
     /// This indicates a new report containing a DAP command has been received
     /// from the host.
@@ -28,7 +28,7 @@ impl DAPEndpoint {
         self.rx_valid(usb);
 
         // Return received data to the application for processing
-        Some(USBStackRequest::AppRequest(Request::DAPCommand((data, n))))
+        Some(USBStackRequest::AppRequest(Request::DAP1Command((data, n))))
     }
 
     /// Indicate a packet has been loaded into the buffer and is ready for transmission
@@ -39,9 +39,9 @@ impl DAPEndpoint {
     }
 }
 
-impl Endpoint for DAPEndpoint {
+impl Endpoint for DAP1Endpoint {
     fn new(epbuf: &'static mut EPBuf, btable: &'static mut BTableRow) -> Self {
-        DAPEndpoint { epbuf, btable }
+        DAP1Endpoint { epbuf, btable }
     }
 
     fn write_btable(&mut self) {
