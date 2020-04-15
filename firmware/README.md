@@ -36,12 +36,14 @@ To generate a binary file suitable for bootloading with dfu-util:
 ```
 cargo build --release
 arm-none-eabi-objcopy -O binary -S target/thumbv6m-none-eabi/release/ffp_firmware ffp.bin
+dfu-suffix -a ffp.bin -v 0483 -p df11
 ```
 
 STM32CubeProg can load data directly from the ELF file, but only if it has a
 `.elf` extension. Simply copy the elf file:
 
 ```
+cargo build --release
 cp target/thumbv6m-none-eabi/release/ffp_firmware ffp_firmware.elf
 ```
 
@@ -54,7 +56,6 @@ automatically.
 
 To bootload using dfu-util:
 ```
-dfu-suffix -a ffp.bin -v 0483 -p df11
 dfu-util -a 0 -s 0x08000000 -D ffp.bin
 ```
 
@@ -62,6 +63,25 @@ To bootload using STM32CubeProg, open the `ffp_firmware.elf` file made above,
 and download it to the FFP.
 
 Reconnect the device after programming to load new firmware.
+
+### Preparing a DfuSe file
+
+Using `dfu-tool`, a DfuSe file can be created for more convenient bootloading:
+
+```
+arm-none-eabi-objcopy -O binary -S target/thumbv6m-none-eabi/release/ffp_firmware ffp.bin
+dfu-tool convert dfuse ffp.bin ffp.dfu
+dfu-tool set-vendor ffp.dfu 0483
+dfu-tool set-product ffp.dfu df11
+dfu-tool set-address ffp.dfu 0x08000000
+```
+
+Unfortunately dfu-tool seemingly cannot set the alt setting to 0, only to >=1,
+so that must still be specified by dfu-util:
+
+```
+dfu-util -a 0 -D ffp.dfu
+```
 
 ## Licence
 
