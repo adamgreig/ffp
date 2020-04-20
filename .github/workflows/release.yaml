@@ -115,12 +115,7 @@ jobs:
               * `ffp_firmware.bin`: FFP firmware image in raw binary format
               * `ffp_firmware.dfu`: FFP firmware image in DfuSe format
 
-            FFP control software requires libusb be installed;
-            on Linux it should suffice to install libusb-1.0,
-            on Windows download the pre-built DLLs from
-            [libusb.info](https://libusb.info/) and either install
-            them system-wide or put them in the same directory as
-            your executable.
+            FFP control software requires libusb be installed; on Linux it should suffice to install libusb-1.0, on Windows download the pre-built DLLs from [libusb.info](https://libusb.info/) and either install them system-wide or put them in the same directory as your executable.
 
             To bootload the firmware using dfu-util, run:
             ```

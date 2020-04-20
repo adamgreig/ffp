@@ -3,7 +3,15 @@
 The control software for FFP runs on your computer and uses the FFP hardware to
 program an FPGA or SPI flash. It is written in Rust.
 
-## Requirements
+## Pre-built Binaries
+
+Pre-built binaries are available for Windows and Linux on the [Releases] page.
+You must have [libusb] installed or available on your system.
+
+[Releases]: https://github.com/adamgreig/ffp/releases
+[libusb]: https://libusb.info
+
+## Build Requirements
 
 * You must have a working Rust compiler installed. Visit
 [rustup.rs](https://rustup.rs) to install Rust.

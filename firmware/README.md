@@ -1,6 +1,15 @@
 # FFP Firmware
 
-## Requirements
+## Pre-built Binaries
+
+Pre-built binaries are available for each release on the [Releases] page. See
+below for instructions on using the files to program an FFP device. The easiest
+method is to use `dfu-util` with the `ffp_firmware.dfu` pre-built file, which
+uses the onboard USB bootloader.
+
+[Releases]: https://github.com/adamgreig/ffp/releases
+
+## Build Requirements
 
 * You must have a working Rust compiler installed. Visit
 [rustup.rs](https://rustup.rs) to install Rust.
