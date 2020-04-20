@@ -22,13 +22,12 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
-          components: llvm-tools-preview
 
       - name: Install additional targets
         run: |
           rustup target add thumbv6m-none-eabi
           rustup target add x86_64-pc-windows-gnu
-#         rustup target add i686-pc-windows-gnu
+          rustup target add i686-pc-windows-gnu
 #         rustup target add i686-unknown-linux-gnu
 #         rustup target add arm-unknown-linux-gnueabihf
 
@@ -36,11 +35,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y p7zip-full build-essential pkg-config \
-              libusb-dev libusb-1.0 dfu-util fwupd gcc-mingw-w64-x86-64
-          cargo install cargo-binutils
+              libusb-dev libusb-1.0 dfu-util fwupd gcc-mingw-w64-x86-64 \
+              gcc-mingw-w64-i686 gcc-arm-none-eabi
 #         sudo apt install -y gcc-arm-linux-gnueabhif libc6-dev-armhf-cross
 #         sudo apt install -y gcc-i686-linux-gnu libc6-dev-i686
-#         sudo apt install -y gcc-mingw-w64-i686
 
       - name: Download libusb DLLs for Windows
         working-directory: software
@@ -75,6 +73,16 @@ jobs:
           cargo build --release --target x86_64-pc-windows-gnu
           cp target/x86_64-pc-windows-gnu/release/ffp.exe ffp_windows_x86_64.exe
 
+      - name: Build for Windows i686
+        working-directory: software
+        env:
+          PKG_CONFIG_ALLOW_CROSS: 1
+          RUSTFLAGS: -L ${{ github.workspace }}/software/libusb/MinGW32/dll/
+        run: |
+          cargo clean
+          cargo build --release --target i686-pc-windows-gnu
+          cp target/i686-pc-windows-gnu/release/ffp.exe ffp_windows_i686.exe
+
       - name: Build firmware
         working-directory: firmware
         run: cargo build --release
@@ -83,7 +91,7 @@ jobs:
         working-directory: firmware
         run: |
           cp target/thumbv6m-none-eabi/release/ffp_firmware ffp_firmware.elf
-          cargo objcopy --release -- -O binary --strip-all ffp_firmware.bin
+          arm-none-eabi-objcopy -O binary -S ffp_firmware.elf ffp_firmware.bin
           dfu-tool convert dfuse ffp_firmware.bin ffp_firmware.dfu
           dfu-tool set-vendor ffp_firmware.dfu 0483
           dfu-tool set-product ffp_firmware.dfu df11
