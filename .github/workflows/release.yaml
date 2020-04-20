@@ -1,0 +1,116 @@
+name: Create Release
+
+on:
+  - push
+
+# on:
+#   push:
+#     tags:
+#       - 'v*'
+
+jobs:
+  build:
+    name: Create Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          components: llvm-tools-preview
+
+    - name: Install additional targets
+      run: |
+        rustup target add thumbv6m-none-eabi
+        rustup target add x86_64-pc-windows-gnu
+#       rustup target add i686-pc-windows-gnu
+#       rustup target add i686-unknown-linux-gnu
+#       rustup target add arm-unknown-linux-gnueabihf
+
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y p7zip-full build-essential pkg-config libusb-dev libusb-1.0
+        sudo apt install -y dfu-util fwupd
+        sudo apt install -y gcc-mingw-w64-x86-64
+#       sudo apt install -y gcc-arm-linux-gnueabhif libc6-dev-armhf-cross
+#       sudo apt install -y gcc-i686-linux-gnu libc6-dev-i686
+#       sudo apt install -y gcc-mingw-w64-i686
+
+    - name: Download libusb DLLs for Windows
+      working_directory: software
+      run: |
+        wget https://github.com/libusb/libusb/releases/download/v1.0.23/libusb-1.0.23.7z
+        mkdir libusb
+        mv libusb-1.0.23.7z libusb/
+        cd libusb
+        7z x libusb-1.0.23.7z
+
+    - name: Build for Linux x86_64
+      working_directory: software
+      run: cargo build --release
+
+#   - name: Build for Linux i686
+#     working_directory: software
+#     run: cargo build --release --target i686-unknown-linux-gnu
+
+    - name: Build for Windows x86_64
+      working_directory: software
+      env:
+        PKG_CONFIG_ALLOW_CROSS: 1
+      run: |
+        cp libusb/MinGW32/dll/libusb-1.0.dll .
+        cargo clean
+        cargo build --release --target x86_64-pc-windows-gnu
+
+    - name: Build firmware
+      working_directory: firmware
+      run: cargo build --release
+
+    - name: Generate bootload files
+      working_directory: firmware
+      run: |
+        cp target/thumbv6m-none-eabi/release/ffp_firmware ffp_firmware.elf
+        cargo objcopy --release -- -O binary --strip-all ffp_firmware.bin
+        dfu-tool convert dfuse ffp_firmware.bin ffp_firmware.dfu
+        dfu-tool set-vendor ffp_firmware.dfu 0483
+        dfu-tool set-product ffp_firmware.dfu df11
+        dfu-tool set-address ffp_firmware.dfu 0x08000000
+
+#     - name: Create release
+#       id: create_release
+#       uses: actions/create-release@v1
+#       env:
+#         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#       with:
+#         tag_name: ${{ github.ref }}
+#         release_name: Release ${{ github.ref }}
+#         draft: true
+#         prerelease: false
+#         body: |
+#           The following pre-built files are available:
+#             * `ffp`: FFP control software for Linux (64-bit)
+#             * `ffp.exe`: FFP control software for Windows (64-bit)
+#             * `ffp_firmware.elf`: FFP firmware image in ELF format
+#             * `ffp_firmware.bin`: FFP firmware image in raw binary format
+#             * `ffp_firmware.dfu`: FFP firmware image in DfuSe format
+#
+#           FFP control software requires libusb be installed;
+#           on Linux it should suffice to install libusb-1.0,
+#           on Windows download the pre-built DLLs from
+#           [libusb.info](https://libusb.info/) and either install
+#           them system-wide or put them in the same directory as `ffp.exe`.
+#
+#           To bootload the firmware using dfu-util, run:
+#           ```
+#           $ ffp bootload
+#           $ dfu-util -a 0 -D ffp_firmware.dfu
+#           ```
+
+#           See [firmware/README.md](https://github.com/adamgreig/ffp/blob/master/firmware/README.md) for more details.
+
