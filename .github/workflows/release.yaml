@@ -28,19 +28,19 @@ jobs:
         run: |
           rustup target add thumbv6m-none-eabi
           rustup target add x86_64-pc-windows-gnu
-  #       rustup target add i686-pc-windows-gnu
-  #       rustup target add i686-unknown-linux-gnu
-  #       rustup target add arm-unknown-linux-gnueabihf
+#         rustup target add i686-pc-windows-gnu
+#         rustup target add i686-unknown-linux-gnu
+#         rustup target add arm-unknown-linux-gnueabihf
 
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y p7zip-full build-essential pkg-config \
               libusb-dev libusb-1.0 dfu-util fwupd gcc-mingw-w64-x86-64
-  #       sudo apt install -y gcc-arm-linux-gnueabhif libc6-dev-armhf-cross
-  #       sudo apt install -y gcc-i686-linux-gnu libc6-dev-i686
-  #       sudo apt install -y gcc-mingw-w64-i686
           cargo install cargo-binutils
+#         sudo apt install -y gcc-arm-linux-gnueabhif libc6-dev-armhf-cross
+#         sudo apt install -y gcc-i686-linux-gnu libc6-dev-i686
+#         sudo apt install -y gcc-mingw-w64-i686
 
       - name: Download libusb DLLs for Windows
         working-directory: software
@@ -58,12 +58,12 @@ jobs:
           cargo build --release
           cp target/release/ffp ffp_linux_x86_64
 
-  #   - name: Build for Linux i686
-  #     working-directory: software
-  #     run: |
-  #       cargo clean
-  #       cargo build --release --target i686-unknown-linux-gnu
-  #       cp target/i686-unknown-linux-gnu/release/ffp ffp_linux_i686
+#     - name: Build for Linux i686
+#       working-directory: software
+#       run: |
+#         cargo clean
+#         cargo build --release --target i686-unknown-linux-gnu
+#         cp target/i686-unknown-linux-gnu/release/ffp ffp_linux_i686
 
       - name: Build for Windows x86_64
         working-directory: software
@@ -91,37 +91,37 @@ jobs:
           ls .
           ls ../software/
 
-  #     - name: Create release
-  #       id: create_release
-  #       uses: actions/create-release@v1
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #       with:
-  #         tag_name: ${{ github.ref }}
-  #         release_name: Release ${{ github.ref }}
-  #         draft: true
-  #         prerelease: false
-  #         body: |
-  #           The following pre-built files are available:
-  #             * `ffp`: FFP control software for Linux (64-bit)
-  #             * `ffp.exe`: FFP control software for Windows (64-bit)
-  #             * `ffp_firmware.elf`: FFP firmware image in ELF format
-  #             * `ffp_firmware.bin`: FFP firmware image in raw binary format
-  #             * `ffp_firmware.dfu`: FFP firmware image in DfuSe format
-  #
-  #           FFP control software requires libusb be installed;
-  #           on Linux it should suffice to install libusb-1.0,
-  #           on Windows download the pre-built DLLs from
-  #           [libusb.info](https://libusb.info/) and either install
-  #           them system-wide or put them in the same directory as `ffp.exe`.
-  #
-  #           To bootload the firmware using dfu-util, run:
-  #           ```
-  #           $ ffp bootload
-  #           $ dfu-util -a 0 -D ffp_firmware.dfu
-  #           ```
-
-  #           See [firmware/README.md](https://github.com/adamgreig/ffp/blob/master/firmware/README.md) for more details.
+#       - name: Create release
+#         id: create_release
+#         uses: actions/create-release@v1
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#         with:
+#           tag_name: ${{ github.ref }}
+#           release_name: Release ${{ github.ref }}
+#           draft: true
+#           prerelease: false
+#           body: |
+#             The following pre-built files are available:
+#               * `ffp`: FFP control software for Linux (64-bit)
+#               * `ffp.exe`: FFP control software for Windows (64-bit)
+#               * `ffp_firmware.elf`: FFP firmware image in ELF format
+#               * `ffp_firmware.bin`: FFP firmware image in raw binary format
+#               * `ffp_firmware.dfu`: FFP firmware image in DfuSe format
+#
+#             FFP control software requires libusb be installed;
+#             on Linux it should suffice to install libusb-1.0,
+#             on Windows download the pre-built DLLs from
+#             [libusb.info](https://libusb.info/) and either install
+#             them system-wide or put them in the same directory as `ffp.exe`.
+#
+#             To bootload the firmware using dfu-util, run:
+#             ```
+#             $ ffp bootload
+#             $ dfu-util -a 0 -D ffp_firmware.dfu
+#             ```
+#
+#             See [firmware/README.md](https://github.com/adamgreig/ffp/blob/master/firmware/README.md) for more details.
 
 #       - name: Upload FFP for Linux x86_64
 #         uses: actions/upload-release-asset@v1
