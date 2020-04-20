@@ -47,12 +47,11 @@ impl ControlEndpoint {
     ///
     /// This typically fires after receiving a SETUP packet containing a request.
     fn process_rx_complete(&mut self, usb: &usb::Instance) -> Option<USBStackRequest> {
-        let stack_request;
-        if read_reg!(usb, usb, EP0R, SETUP) == 1 {
-            stack_request = self.process_setup(usb);
+        let stack_request = if read_reg!(usb, usb, EP0R, SETUP) == 1 {
+            self.process_setup(usb)
         } else {
-            stack_request = None;
-        }
+            None
+        };
 
         // Resume reception on EP0
         self.rx_valid(usb);

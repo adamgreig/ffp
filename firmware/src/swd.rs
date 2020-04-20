@@ -40,9 +40,10 @@ pub enum APnDP {
 
 impl From<bool> for APnDP {
     fn from(x: bool) -> APnDP {
-        match x {
-            true => APnDP::AP,
-            false => APnDP::DP,
+        if x {
+            APnDP::AP
+        } else {
+            APnDP::DP
         }
     }
 }
@@ -196,9 +197,10 @@ impl<'a> SWD<'a> {
         // Back to driving SWDIO to ensure it doesn't float high
         self.pins.swd_tx();
 
-        match parity == (data.count_ones() & 1) {
-            true => return Ok(data),
-            false => return Err(Error::BadParity),
+        if parity == (data.count_ones() & 1) {
+            Ok(data)
+        } else {
+            Err(Error::BadParity)
         }
     }
 
@@ -232,7 +234,7 @@ impl<'a> SWD<'a> {
     }
 
     fn make_request(apndp: APnDP, rnw: RnW, a: u8) -> u8 {
-        let req = (1 << 0) | ((apndp as u8) << 1) | ((rnw as u8) << 2) | (a << 3) | (1 << 7);
+        let req = 1 | ((apndp as u8) << 1) | ((rnw as u8) << 2) | (a << 3) | (1 << 7);
         let parity = (req.count_ones() & 1) as u8;
         req | (parity << 5)
     }

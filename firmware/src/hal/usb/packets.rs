@@ -42,7 +42,7 @@ pub enum VendorRequest {
     GetTPwr = 5,
     SetLED = 6,
     Bootload = 7,
-    GetOSFeature = 'A' as u8,
+    GetOSFeature = b'A',
 }
 
 #[derive(TryFromPrimitive)]

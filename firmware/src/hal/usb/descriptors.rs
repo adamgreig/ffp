@@ -1,6 +1,8 @@
 // Copyright 2019-2020 Adam Greig
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
+#![allow(clippy::inconsistent_digit_grouping)]
+
 use core::mem::size_of;
 use super::packets::*;
 
@@ -190,8 +192,7 @@ pub static DAP2_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP2_NUM_ENDPOINTS] =
     },
 ];
 
-const MS_COMPATIBLE_ID_WINUSB: [u8; 8] = [
-    'W' as u8, 'I' as u8, 'N' as u8, 'U' as u8, 'S' as u8, 'B' as u8, 0, 0];
+const MS_COMPATIBLE_ID_WINUSB: [u8; 8] = [b'W', b'I', b'N', b'U', b'S', b'B', 0, 0];
 
 pub static MS_COMPATIBLE_ID_DESCRIPTOR: MSCompatibleIDDescriptor = MSCompatibleIDDescriptor {
     dwLength: size_of::<MSCompatibleIDDescriptor>() as u32,

@@ -39,12 +39,6 @@ pub struct MemoisedMode {
     value: u32,
 }
 
-impl MemoisedMode {
-    pub fn new() -> Self {
-        MemoisedMode { mask: 0, value: 0 }
-    }
-}
-
 impl<'a> GPIO {
     pub fn new(p: gpio::Instance) -> Self {
         GPIO { p }
@@ -94,7 +88,7 @@ impl<'a> GPIO {
         MemoisedMode { mask: !mask, value }
     }
 
-    pub fn apply_memoised_mode(&'a self, mode: &MemoisedMode) -> &Self {
+    pub fn apply_memoised_mode(&'a self, mode: MemoisedMode) -> &Self {
         modify_reg!(gpio, self.p, MODER, |r| (r & mode.mask) | mode.value);
         self
     }
@@ -299,7 +293,7 @@ impl<'a> Pin<'a> {
         GPIO::memoise_mode_analog(self.n)
     }
 
-    pub fn apply_memoised_mode(&'a self, mode: &MemoisedMode) -> &Self {
+    pub fn apply_memoised_mode(&'a self, mode: MemoisedMode) -> &Self {
         self.port.apply_memoised_mode(mode);
         self
     }
@@ -473,21 +467,21 @@ impl<'a> Pins<'a> {
 
     /// Disconnect MOSI from flash_si, target drives the bus
     pub fn swd_rx(&self) {
-        self.flash_si.apply_memoised_mode(&self.flash_si_input_mode);
+        self.flash_si.apply_memoised_mode(self.flash_si_input_mode);
     }
 
     /// Connect MOSI to flash_si, we drive the bus
     pub fn swd_tx(&self) {
-        self.flash_si.apply_memoised_mode(&self.flash_si_alternate_mode);
+        self.flash_si.apply_memoised_mode(self.flash_si_alternate_mode);
     }
 
     /// Swap clk pin to direct output mode for manual driving
     pub fn swd_clk_direct(&self) {
-        self.sck.apply_memoised_mode(&self.sck_output_mode);
+        self.sck.apply_memoised_mode(self.sck_output_mode);
     }
 
     /// Swap clk pin back to alternate mode for SPI use
     pub fn swd_clk_spi(&self) {
-        self.sck.apply_memoised_mode(&self.sck_alternate_mode);
+        self.sck.apply_memoised_mode(self.sck_alternate_mode);
     }
 }

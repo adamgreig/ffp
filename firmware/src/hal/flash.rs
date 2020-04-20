@@ -7,8 +7,8 @@ pub struct Flash {
     flash: flash::Instance,
 }
 
-const KEY1: u32 = 0x45670123;
-const KEY2: u32 = 0xCDEF89AB;
+const KEY1: u32 = 0x4567_0123;
+const KEY2: u32 = 0xCDEF_89AB;
 const OPT_RDP_ADDR:  u32 = 0x1FFF_F800;
 const OPT_RDP_VALUE:  u8 = 0xAA;
 const OPT_USER_ADDR: u32 = 0x1FFF_F802;

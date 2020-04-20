@@ -1,6 +1,8 @@
 // Copyright 2019-2020 Adam Greig
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
+#![allow(clippy::identity_op)]
+
 use core::convert::{TryFrom, TryInto};
 use num_enum::{TryFromPrimitive, IntoPrimitive};
 use crate::{swd, hal::{gpio::Pins, spi::SPIClock}};
@@ -82,9 +84,9 @@ enum HostStatusType {
 #[derive(Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 enum ConnectPort {
-    DefaultPort = 0,
-    SWDPort     = 1,
-    JTAGPort    = 2,
+    Default = 0,
+    SWD     = 1,
+    JTAG    = 2,
 }
 
 #[repr(u8)]
@@ -283,13 +285,12 @@ impl <'a> DAP<'a> {
         let status_type = req.next_u8();
         let status_status = req.next_u8();
         // Use HostStatus to set our LED when host is connected to target
-        match HostStatusType::try_from(status_type) {
-            Ok(HostStatusType::Connect) => match status_status {
+        if let Ok(HostStatusType::Connect) = HostStatusType::try_from(status_type) {
+            match status_status {
                 0 => { self.pins.led.set_low();  },
                 1 => { self.pins.led.set_high(); },
                 _ => (),
-            },
-            _ => (),
+            }
         }
         resp.write_u8(0);
         Some(resp)
@@ -299,7 +300,7 @@ impl <'a> DAP<'a> {
         let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
         let port = req.next_u8();
         match ConnectPort::try_from(port) {
-            Ok(ConnectPort::DefaultPort) | Ok(ConnectPort::SWDPort) => {
+            Ok(ConnectPort::Default) | Ok(ConnectPort::SWD) => {
                 self.pins.swd_mode();
                 self.swd.spi_enable();
                 self.configured = true;
@@ -575,6 +576,7 @@ impl <'a> DAP<'a> {
         Some(resp)
     }
 
+    #[allow(clippy::collapsible_if)]
     fn process_transfer_block(&mut self, mut req: Request) -> Option<ResponseWriter> {
         let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
         let _idx = req.next_u8();
