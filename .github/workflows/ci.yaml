@@ -24,46 +24,16 @@ jobs:
           profile: minimal
           override: true
 
+      # We can't currently use actions-rs/cargo because it doesn't
+      # support a working_directory argument, and --manifest-path
+      # ignores firmware/.cargo/config.
+      # See https://github.com/actions-rs/cargo/issues/6
+      # We also can't use Clippy until this is resolved:
+      # https://github.com/actions-rs/clippy-check/issues/28
       - name: Check software
-        uses: actions-rs/cargo@v1
         working-directory: software
-        with:
-          command: build
+        run: cargo build
 
       - name: Check firmware
-        uses: actions-rs/cargo@v1
         working-directory: firmware
-        with:
-          command: build
-          args: --release
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Install libusb
-        run: |
-          sudo apt update
-          sudo apt install -y libusb-dev libusb-1.0
-
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
-
-      - name: Check software
-        uses: actions-rs/clippy-check@v1
-        working-directory: software
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check firmware
-        uses: actions-rs/clippy-check@v1
-        working-directory: firmware
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: cargo build --release
