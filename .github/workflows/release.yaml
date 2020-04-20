@@ -1,12 +1,9 @@
 name: Create Release
 
 on:
-  - push
-
-# on:
-#   push:
-#     tags:
-#       - 'v*'
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -77,7 +74,7 @@ jobs:
         working-directory: software
         env:
           PKG_CONFIG_ALLOW_CROSS: 1
-          RUSTFLAGS: -L ${{ github.workspace }}/software/libusb/MinGW32/dll/
+          RUSTFLAGS: -L ${{ github.workspace }}/software/libusb/MinGW32/dll/ -C panic=abort
         run: |
           cargo clean
           cargo build --release --target i686-pc-windows-gnu
@@ -99,54 +96,96 @@ jobs:
           ls .
           ls ../software/
 
-#       - name: Create release
-#         id: create_release
-#         uses: actions/create-release@v1
-#         env:
-#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#         with:
-#           tag_name: ${{ github.ref }}
-#           release_name: Release ${{ github.ref }}
-#           draft: true
-#           prerelease: false
-#           body: |
-#             The following pre-built files are available:
-#               * `ffp`: FFP control software for Linux (64-bit)
-#               * `ffp.exe`: FFP control software for Windows (64-bit)
-#               * `ffp_firmware.elf`: FFP firmware image in ELF format
-#               * `ffp_firmware.bin`: FFP firmware image in raw binary format
-#               * `ffp_firmware.dfu`: FFP firmware image in DfuSe format
-#
-#             FFP control software requires libusb be installed;
-#             on Linux it should suffice to install libusb-1.0,
-#             on Windows download the pre-built DLLs from
-#             [libusb.info](https://libusb.info/) and either install
-#             them system-wide or put them in the same directory as `ffp.exe`.
-#
-#             To bootload the firmware using dfu-util, run:
-#             ```
-#             $ ffp bootload
-#             $ dfu-util -a 0 -D ffp_firmware.dfu
-#             ```
-#
-#             See [firmware/README.md](https://github.com/adamgreig/ffp/blob/master/firmware/README.md) for more details.
+        - name: Create release
+          id: create_release
+          uses: actions/create-release@v1
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            tag_name: ${{ github.ref }}
+            release_name: Release ${{ github.ref }}
+            draft: true
+            prerelease: false
+            body: |
+              The following pre-built files are available:
+                * `ffp_linux_x86_64`: FFP control software for Linux (64-bit)
+                * `ffp_windows_x86_64.exe`: FFP control software for Windows (64-bit)
+                * `ffp_windows_i686.exe`: FFP control software for Windows (32-bit)
+                * `ffp_firmware.elf`: FFP firmware image in ELF format
+                * `ffp_firmware.bin`: FFP firmware image in raw binary format
+                * `ffp_firmware.dfu`: FFP firmware image in DfuSe format
 
-#       - name: Upload FFP for Linux x86_64
-#         uses: actions/upload-release-asset@v1
-#         env:
-#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#         with:
-#           upload_url: ${{ steps.create_release.outputs.upload_url }}
-#           asset_path: software/target/release/ffp
-#           asset_name: ffp
-#           asset_content_type: application/octet-stream
+              FFP control software requires libusb be installed;
+              on Linux it should suffice to install libusb-1.0,
+              on Windows download the pre-built DLLs from
+              [libusb.info](https://libusb.info/) and either install
+              them system-wide or put them in the same directory as
+              your executable.
 
-#       - name: Upload FFP for Windows x86_64
-#         uses: actions/upload-release-asset@v1
-#         env:
-#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#         with:
-#           upload_url: ${{ steps.create_release.outputs.upload_url }}
-#           asset_path: software/target/x86_64-pc-windows-gnu/release/ffp.exe
-#           asset_name: ffp
-#           asset_content_type: application/octet-stream
+              To bootload the firmware using dfu-util, run:
+              ```
+              $ ffp bootload
+              $ dfu-util -a 0 -D ffp_firmware.dfu
+              ```
+
+              See [firmware/README.md](https://github.com/adamgreig/ffp/blob/master/firmware/README.md) for more details.
+
+        - name: Upload FFP for Linux x86_64
+          uses: actions/upload-release-asset@v1
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            upload_url: ${{ steps.create_release.outputs.upload_url }}
+            asset_path: software/ffp_linux_x86_64
+            asset_name: ffp_linux_x86_64
+            asset_content_type: application/octet-stream
+
+        - name: Upload FFP for Windows x86_64
+          uses: actions/upload-release-asset@v1
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            upload_url: ${{ steps.create_release.outputs.upload_url }}
+            asset_path: software/ffp_windows_x86_64.exe
+            asset_name: ffp_windows_x86_64.exe
+            asset_content_type: application/octet-stream
+
+        - name: Upload FFP for Windows i686
+          uses: actions/upload-release-asset@v1
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            upload_url: ${{ steps.create_release.outputs.upload_url }}
+            asset_path: software/ffp_windows_i686.exe
+            asset_name: ffp_windows_i686.exe
+            asset_content_type: application/octet-stream
+
+        - name: Upload FFP firmware ELF
+          uses: actions/upload-release-asset@v1
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            upload_url: ${{ steps.create_release.outputs.upload_url }}
+            asset_path: firmware/ffp_firmware.elf
+            asset_name: ffp_firmware.elf
+            asset_content_type: application/octet-stream
+
+        - name: Upload FFP firmware BIN
+          uses: actions/upload-release-asset@v1
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            upload_url: ${{ steps.create_release.outputs.upload_url }}
+            asset_path: firmware/ffp_firmware.bin
+            asset_name: ffp_firmware.bin
+            asset_content_type: application/octet-stream
+
+        - name: Upload FFP firmware DFU
+          uses: actions/upload-release-asset@v1
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            upload_url: ${{ steps.create_release.outputs.upload_url }}
+            asset_path: firmware/ffp_firmware.dfu
+            asset_name: ffp_firmware.dfu
+            asset_content_type: application/octet-stream
