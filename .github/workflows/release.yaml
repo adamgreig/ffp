@@ -34,10 +34,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt update
-          sudo apt install -y p7zip-full build-essential pkg-config libusb-dev libusb-1.0
-          sudo apt install -y dfu-util fwupd
-          sudo apt install -y gcc-mingw-w64-x86-64
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full build-essential pkg-config libusb-dev libusb-1.0
+          sudo apt-get install -y dfu-util fwupd
+          sudo apt-get install -y gcc-mingw-w64-x86-64
   #       sudo apt install -y gcc-arm-linux-gnueabhif libc6-dev-armhf-cross
   #       sudo apt install -y gcc-i686-linux-gnu libc6-dev-i686
   #       sudo apt install -y gcc-mingw-w64-i686
@@ -51,9 +51,9 @@ jobs:
           cd libusb
           7z x libusb-1.0.23.7z
 
-      - name: Build for Linux x86_64
-        working-directory: software
-        run: cargo build --release
+  #   - name: Build for Linux x86_64
+  #     working-directory: software
+  #     run: cargo build --release
 
   #   - name: Build for Linux i686
   #     working-directory: software
@@ -63,8 +63,8 @@ jobs:
         working-directory: software
         env:
           PKG_CONFIG_ALLOW_CROSS: 1
+          RUSTFLAGS: "-L $GITHUB_WORKSPACE/software/libusb/MinGW64/dll/"
         run: |
-          cp libusb/MinGW32/dll/libusb-1.0.dll .
           cargo clean
           cargo build --release --target x86_64-pc-windows-gnu
 
