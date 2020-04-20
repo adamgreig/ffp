@@ -35,13 +35,12 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y p7zip-full build-essential pkg-config
-          sudo apt-get install -y libusb-dev libusb-1.0
-          sudo apt-get install -y dfu-util fwupd
-          sudo apt-get install -y gcc-mingw-w64-x86-64
+          sudo apt-get install -y p7zip-full build-essential pkg-config \
+              libusb-dev libusb-1.0 dfu-util fwupd gcc-mingw-w64-x86-64
   #       sudo apt install -y gcc-arm-linux-gnueabhif libc6-dev-armhf-cross
   #       sudo apt install -y gcc-i686-linux-gnu libc6-dev-i686
   #       sudo apt install -y gcc-mingw-w64-i686
+          cargo install cargo-binutils
 
       - name: Download libusb DLLs for Windows
         working-directory: software
@@ -52,13 +51,19 @@ jobs:
           cd libusb
           7z x libusb-1.0.23.7z
 
-  #   - name: Build for Linux x86_64
-  #     working-directory: software
-  #     run: cargo build --release
+      - name: Build for Linux x86_64
+        working-directory: software
+        run: |
+          cargo clean
+          cargo build --release
+          cp target/release/ffp ffp_linux_x86_64
 
   #   - name: Build for Linux i686
   #     working-directory: software
-  #     run: cargo build --release --target i686-unknown-linux-gnu
+  #     run: |
+  #       cargo clean
+  #       cargo build --release --target i686-unknown-linux-gnu
+  #       cp target/i686-unknown-linux-gnu/release/ffp ffp_linux_i686
 
       - name: Build for Windows x86_64
         working-directory: software
@@ -68,6 +73,7 @@ jobs:
         run: |
           cargo clean
           cargo build --release --target x86_64-pc-windows-gnu
+          cp target/x86_64-pc-windows-gnu/release/ffp.exe ffp_windows_x86_64.exe
 
       - name: Build firmware
         working-directory: firmware
@@ -82,6 +88,8 @@ jobs:
           dfu-tool set-vendor ffp_firmware.dfu 0483
           dfu-tool set-product ffp_firmware.dfu df11
           dfu-tool set-address ffp_firmware.dfu 0x08000000
+          ls .
+          ls ../software/
 
   #     - name: Create release
   #       id: create_release
@@ -115,3 +123,22 @@ jobs:
 
   #           See [firmware/README.md](https://github.com/adamgreig/ffp/blob/master/firmware/README.md) for more details.
 
+#       - name: Upload FFP for Linux x86_64
+#         uses: actions/upload-release-asset@v1
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#         with:
+#           upload_url: ${{ steps.create_release.outputs.upload_url }}
+#           asset_path: software/target/release/ffp
+#           asset_name: ffp
+#           asset_content_type: application/octet-stream
+
+#       - name: Upload FFP for Windows x86_64
+#         uses: actions/upload-release-asset@v1
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#         with:
+#           upload_url: ${{ steps.create_release.outputs.upload_url }}
+#           asset_path: software/target/x86_64-pc-windows-gnu/release/ffp.exe
+#           asset_name: ffp
+#           asset_content_type: application/octet-stream
