@@ -43,7 +43,7 @@ jobs:
   #       sudo apt install -y gcc-mingw-w64-i686
 
       - name: Download libusb DLLs for Windows
-        working_directory: software
+        working-directory: software
         run: |
           wget https://github.com/libusb/libusb/releases/download/v1.0.23/libusb-1.0.23.7z
           mkdir libusb
@@ -52,15 +52,15 @@ jobs:
           7z x libusb-1.0.23.7z
 
       - name: Build for Linux x86_64
-        working_directory: software
+        working-directory: software
         run: cargo build --release
 
   #   - name: Build for Linux i686
-  #     working_directory: software
+  #     working-directory: software
   #     run: cargo build --release --target i686-unknown-linux-gnu
 
       - name: Build for Windows x86_64
-        working_directory: software
+        working-directory: software
         env:
           PKG_CONFIG_ALLOW_CROSS: 1
         run: |
@@ -69,11 +69,11 @@ jobs:
           cargo build --release --target x86_64-pc-windows-gnu
 
       - name: Build firmware
-        working_directory: firmware
+        working-directory: firmware
         run: cargo build --release
 
       - name: Generate bootload files
-        working_directory: firmware
+        working-directory: firmware
         run: |
           cp target/thumbv6m-none-eabi/release/ffp_firmware ffp_firmware.elf
           cargo objcopy --release -- -O binary --strip-all ffp_firmware.bin

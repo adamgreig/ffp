@@ -26,7 +26,7 @@ jobs:
           target: thumbv6m-none-eabi
 
       # We can't currently use actions-rs/cargo because it doesn't
-      # support a working_directory argument, and --manifest-path
+      # support a working-directory argument, and --manifest-path
       # ignores firmware/.cargo/config.
       # See https://github.com/actions-rs/cargo/issues/6
       # We also can't use Clippy until this is resolved:
