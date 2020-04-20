@@ -5,6 +5,7 @@ use clap::{Arg, App, AppSettings, SubCommand};
 use clap::{value_t, crate_authors, crate_description, crate_version};
 use ffp::{Programmer, Flash, FPGA};
 
+#[allow(clippy::cognitive_complexity)]
 fn main() -> ffp::Result<()> {
     let matches = App::new("ffp fpga/flash programmer")
         .version(crate_version!())
