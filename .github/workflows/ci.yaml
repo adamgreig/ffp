@@ -23,6 +23,7 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
+          target: thumbv6m-none-eabi
 
       # We can't currently use actions-rs/cargo because it doesn't
       # support a working_directory argument, and --manifest-path
