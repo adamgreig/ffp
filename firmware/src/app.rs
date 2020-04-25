@@ -49,7 +49,8 @@ impl<'a> App<'a> {
     pub fn new(flash: &'a hal::flash::Flash, rcc: &'a hal::rcc::RCC,
                nvic: &'a hal::nvic::NVIC, dma: &'a hal::dma::DMA,
                pins: &'a hal::gpio::Pins<'a>, spi: &'a hal::spi::SPI,
-               usb: &'a mut hal::usb::USB, dap: &'a mut dap::DAP<'a>) -> Self {
+               usb: &'a mut hal::usb::USB, dap: &'a mut dap::DAP<'a>) -> Self
+    {
         App {
             flash, rcc, nvic, dma, pins, spi, usb, dap,
         }
@@ -62,7 +63,7 @@ impl<'a> App<'a> {
         self.rcc.setup();
         // Enable SEVONPEND
         self.nvic.setup();
-        // Configure DMA for SPI1 transfers
+        // Configure DMA for SPI1 and USART2 transfers
         self.dma.setup();
         // Configure GPIOs
         self.pins.setup();

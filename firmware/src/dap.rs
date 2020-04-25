@@ -5,7 +5,7 @@
 
 use core::convert::{TryFrom, TryInto};
 use num_enum::{TryFromPrimitive, IntoPrimitive};
-use crate::{swd, hal::{gpio::Pins, spi::SPIClock}};
+use crate::{swd, hal::{gpio::Pins, spi::SPIClock, uart::UART}};
 
 #[derive(Copy, Clone, TryFromPrimitive)]
 #[allow(non_camel_case_types)]
@@ -31,7 +31,7 @@ enum Command {
     DAP_SWO_Baudrate        = 0x19,
     DAP_SWO_Control         = 0x1A,
     DAP_SWO_Status          = 0x1B,
-    DPA_SWO_ExtendedStatus  = 0x1E,
+    DAP_SWO_ExtendedStatus  = 0x1E,
     DAP_SWO_Data            = 0x1C,
 
     DAP_JTAG_Sequence       = 0x14,
@@ -96,6 +96,29 @@ enum ConnectPortResponse {
 
     #[allow(unused)]
     JTAG    = 2,
+}
+
+#[derive(TryFromPrimitive)]
+#[repr(u8)]
+enum SWOTransport {
+    None        = 0,
+    DAPCommand  = 1,
+    USBEndpoint = 2,
+}
+
+#[derive(TryFromPrimitive)]
+#[repr(u8)]
+enum SWOMode {
+    Off         = 0,
+    UART        = 1,
+    Manchester  = 2,
+}
+
+#[derive(TryFromPrimitive)]
+#[repr(u8)]
+enum SWOControl {
+    Stop    = 0,
+    Start   = 1,
 }
 
 struct Request<'a> {
@@ -200,6 +223,7 @@ impl <'a> ResponseWriter<'a> {
 
 pub struct DAP<'a> {
     swd: swd::SWD<'a>,
+    uart: &'a mut UART<'a>,
     pins: &'a Pins<'a>,
     rbuf: [u8; 64],
     configured: bool,
@@ -207,10 +231,11 @@ pub struct DAP<'a> {
 }
 
 impl <'a> DAP<'a> {
-    pub fn new(swd: swd::SWD<'a>, pins: &'a Pins) -> Self {
+    pub fn new(swd: swd::SWD<'a>, uart: &'a mut UART<'a>, pins: &'a Pins) -> Self
+    {
         DAP {
-            swd, pins, rbuf: [0u8; 64], configured: false,
-            match_retries: 5,
+            swd, uart, pins, rbuf: [0u8; 64],
+            configured: false, match_retries: 5,
         }
     }
 
@@ -228,6 +253,13 @@ impl <'a> DAP<'a> {
             Command::DAP_SWJ_Clock => self.process_swj_clock(req),
             Command::DAP_SWJ_Sequence => self.process_swj_sequence(req),
             Command::DAP_SWD_Configure => self.process_swd_configure(req),
+            Command::DAP_SWO_Transport => self.process_swo_transport(req),
+            Command::DAP_SWO_Mode => self.process_swo_mode(req),
+            Command::DAP_SWO_Baudrate => self.process_swo_baudrate(req),
+            Command::DAP_SWO_Control => self.process_swo_control(req),
+            Command::DAP_SWO_Status => self.process_swo_status(req),
+            Command::DAP_SWO_ExtendedStatus => self.process_swo_extended_status(req),
+            Command::DAP_SWO_Data => self.process_swo_data(req),
             Command::DAP_TransferConfigure => self.process_transfer_configure(req),
             Command::DAP_Transfer => self.process_transfer(req),
             Command::DAP_TransferBlock => self.process_transfer_block(req),
@@ -253,21 +285,24 @@ impl <'a> DAP<'a> {
             // unknown target device.
             Ok(DAPInfoID::TargetVendor) => resp.write_u8(0),
             Ok(DAPInfoID::TargetName) => resp.write_u8(0),
-            //
             Ok(DAPInfoID::Capabilities) => {
                 resp.write_u8(1);
                 // Bit 0: SWD supported
                 // Bit 1: JTAG not supported
-                // Bit 2: SWO UART not supported
+                // Bit 2: SWO UART supported
                 // Bit 3: SWO Manchester not supported
                 // Bit 4: Atomic commands not supported
                 // Bit 5: Test Domain Timer not supported
                 // Bit 6: SWO Streaming Trace not supported
-                resp.write_u8(0b0000_0001);
+                resp.write_u8(0b0000_0101);
+            },
+            Ok(DAPInfoID::SWOTraceBufferSize) => {
+                resp.write_u8(4);
+                resp.write_u32(self.uart.buffer_len() as u32);
             },
             Ok(DAPInfoID::MaxPacketCount) => {
                 resp.write_u8(1);
-                // Maximum of one packet at a time. What does this mean?
+                // Maximum of one packet at a time
                 resp.write_u8(1);
             },
             Ok(DAPInfoID::MaxPacketSize) => {
@@ -460,6 +495,108 @@ impl <'a> DAP<'a> {
             resp.write_ok();
         } else {
             resp.write_err();
+        }
+        Some(resp)
+    }
+
+    fn process_swo_transport(&mut self, mut req: Request) -> Option<ResponseWriter> {
+        let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
+        let transport = req.next_u8();
+        match SWOTransport::try_from(transport) {
+            Ok(SWOTransport::None) => {
+                resp.write_ok();
+            },
+            Ok(SWOTransport::DAPCommand) => {
+                resp.write_ok();
+            },
+            _ => resp.write_err(),
+        }
+        Some(resp)
+    }
+
+    fn process_swo_mode(&mut self, mut req: Request) -> Option<ResponseWriter> {
+        let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
+        let mode = req.next_u8();
+        match SWOMode::try_from(mode) {
+            Ok(SWOMode::Off) => {
+                resp.write_ok();
+            },
+            Ok(SWOMode::UART) => {
+                resp.write_ok();
+            },
+            _ => resp.write_err(),
+        }
+        Some(resp)
+    }
+
+    fn process_swo_baudrate(&mut self, mut req: Request) -> Option<ResponseWriter> {
+        let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
+        let target = req.next_u32();
+        let actual = self.uart.set_baud(target);
+        resp.write_u32(actual);
+        Some(resp)
+    }
+
+    fn process_swo_control(&mut self, mut req: Request) -> Option<ResponseWriter> {
+        let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
+        match SWOControl::try_from(req.next_u8()) {
+            Ok(SWOControl::Stop) => {
+                self.uart.stop();
+                resp.write_ok();
+            },
+            Ok(SWOControl::Start) => {
+                self.uart.start();
+                resp.write_ok();
+            },
+            _ => resp.write_err(),
+        }
+        Some(resp)
+    }
+
+    fn process_swo_status(&mut self, req: Request) -> Option<ResponseWriter> {
+        let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
+        // Trace status:
+        // Bit 0: trace capture active
+        // Bit 6: trace stream error (always written as 0)
+        // Bit 7: trace buffer overflow (always written as 0)
+        resp.write_u8(self.uart.is_active() as u8);
+        // Trace count: remaining bytes in buffer
+        resp.write_u32(self.uart.bytes_available() as u32);
+        Some(resp)
+    }
+
+    fn process_swo_extended_status(&mut self, req: Request) -> Option<ResponseWriter> {
+        let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
+        // Trace status:
+        // Bit 0: trace capture active
+        // Bit 6: trace stream error (always written as 0)
+        // Bit 7: trace buffer overflow (always written as 0)
+        resp.write_u8(self.uart.is_active() as u8);
+        // Trace count: remaining bytes in buffer.
+        resp.write_u32(self.uart.bytes_available() as u32);
+        // Index: sequence number of next trace. Always written as 0.
+        resp.write_u32(0);
+        // TD_TimeStamp: test domain timer value for trace sequence
+        resp.write_u32(0);
+        Some(resp)
+    }
+
+    fn process_swo_data(&mut self, mut req: Request) -> Option<ResponseWriter> {
+        let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
+        // Limit maximum requested bytes to our maximum return size
+        let n = usize::min(req.next_u16() as usize, 60);
+        // Write status byte to response
+        resp.write_u8(self.uart.is_active() as u8);
+        // Read data from UART
+        let mut buf = [0u8; 60];
+        match self.uart.read(&mut buf[..n]) {
+            None => {
+                resp.write_u16(0);
+            },
+            Some(data) => {
+                resp.write_u16(data.len() as u16);
+                resp.write_slice(data);
+            },
         }
         Some(resp)
     }

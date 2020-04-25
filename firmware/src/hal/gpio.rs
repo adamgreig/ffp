@@ -360,19 +360,21 @@ impl<'a> Pins<'a> {
             .set_mode_output();
 
         // Open-drain output to FPGA and Flash CS (active low).
+        // In SWD mode, AF1 USART2_RX.
         self.cs
             .set_high()
             .set_otype_opendrain()
             .set_ospeed_high()
             .set_pull_up()
-            .set_mode_output();
+            .set_af(1)
+            .set_mode_input();
 
         // Open-drain output to FPGA reset line (active low).
         self.fpga_rst
             .set_high()
             .set_otype_opendrain()
             .set_ospeed_high()
-            .set_mode_output();
+            .set_mode_input();
 
         // Push-pull output to SPI SCK. Starts high-impedance.
         self.sck
@@ -404,10 +406,10 @@ impl<'a> Pins<'a> {
 
         // Push-pull SPI MOSI to FPGA (Flash MISO). Starts high-impedance.
         self.fpga_si
-            .set_mode_input()
             .set_af(0)
             .set_otype_pushpull()
-            .set_ospeed_veryhigh();
+            .set_ospeed_veryhigh()
+            .set_mode_input();
 
         // Input from target power rail.
         self.tpwr_det
@@ -429,6 +431,7 @@ impl<'a> Pins<'a> {
         self.flash_si.set_mode_input();
         self.fpga_so.set_mode_alternate();
         self.fpga_si.set_mode_alternate();
+        self.fpga_rst.set_mode_output();
     }
 
     /// Place SPI pins into flash-programming mode
@@ -439,6 +442,7 @@ impl<'a> Pins<'a> {
         self.fpga_si.set_mode_input();
         self.flash_so.set_otype_pushpull().set_mode_alternate();
         self.flash_si.set_mode_alternate();
+        self.fpga_rst.set_mode_output();
     }
 
     /// Place SPI pins into high-impedance mode
@@ -449,6 +453,7 @@ impl<'a> Pins<'a> {
         self.flash_si.set_mode_input();
         self.fpga_so.set_mode_input();
         self.fpga_si.set_mode_input();
+        self.fpga_rst.set_mode_input();
     }
 
     /// Place SPI pins into SWD mode:
@@ -457,12 +462,13 @@ impl<'a> Pins<'a> {
     /// * flash_si pin is MOSI when we drive SWDIO or input when target drives it
     /// * flash_so is output open-drain for nRESET
     pub fn swd_mode(&self) {
-        self.cs.set_mode_input();
+        self.cs.set_mode_alternate();
         self.sck.set_mode_alternate().set_pull_up();
         self.flash_so.set_otype_opendrain().set_high().set_mode_output();
         self.flash_si.set_mode_alternate();
         self.fpga_so.set_mode_alternate();
         self.fpga_si.set_mode_input();
+        self.fpga_rst.set_mode_input();
     }
 
     /// Disconnect MOSI from flash_si, target drives the bus

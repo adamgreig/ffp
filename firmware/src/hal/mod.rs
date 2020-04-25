@@ -8,5 +8,6 @@ pub mod gpio;
 pub mod dma;
 pub mod spi;
 pub mod usb;
+pub mod uart;
 pub mod bootload;
 pub mod unique_id;

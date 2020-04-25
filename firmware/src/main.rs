@@ -40,6 +40,7 @@ fn main() -> ! {
     let gpioa = hal::gpio::GPIO::new(stm32ral::gpio::GPIOA::take().unwrap());
     let gpiob = hal::gpio::GPIO::new(stm32ral::gpio::GPIOB::take().unwrap());
     let spi = hal::spi::SPI::new(stm32ral::spi::SPI1::take().unwrap());
+    let mut uart = hal::uart::UART::new(stm32ral::usart::USART2::take().unwrap(), &dma);
     let mut usb = hal::usb::USB::new(stm32ral::usb::USB::take().unwrap());
 
     // Define pinout.
@@ -70,10 +71,11 @@ fn main() -> ! {
     };
 
     let swd = swd::SWD::new(&spi, &pins);
-    let mut dap = dap::DAP::new(swd, &pins);
+    let mut dap = dap::DAP::new(swd, &mut uart, &pins);
 
     // Create App instance with the HAL instances
-    let mut app = app::App::new(&flash, &rcc, &nvic, &dma, &pins, &spi, &mut usb, &mut dap);
+    let mut app = app::App::new(
+        &flash, &rcc, &nvic, &dma, &pins, &spi, &mut usb, &mut dap);
 
     // Initialise application, including system peripherals
     app.setup();
