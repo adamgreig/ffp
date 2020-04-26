@@ -23,6 +23,7 @@ impl<'a> UART<'a> {
     ///
     /// UART::poll must be called regularly after starting.
     pub fn start(&mut self) {
+        self.last_idx = 0;
         write_reg!(usart, self.uart, CR3, DMAR: Enabled);
         write_reg!(usart, self.uart, CR1, OVER8: Oversampling8, RE: Enabled, UE: Enabled);
         self.dma.usart2_start(&mut self.buffer);
@@ -81,8 +82,12 @@ impl<'a> UART<'a> {
     /// Remaining data will be read on the next call, so long as the internal buffer
     /// doesn't overflow, which is not detected.
     pub fn read<'buf>(&mut self, rx: &'buf mut [u8]) -> Option<&'buf [u8]> {
-        // See what index the DMA is going to write next
+        // See what index the DMA is going to write next, and copy out
+        // all prior data. Even if the DMA writes new data while we're
+        // processing we won't get out of sync and will handle the new
+        // data next time read() is called.
         let dma_idx = self.buffer.len() - self.dma.usart2_ndtr();
+
         match dma_idx.cmp(&self.last_idx) {
             Ordering::Equal => {
                 // No action required if no data has been received.
@@ -105,7 +110,7 @@ impl<'a> UART<'a> {
                     new_last_idx = n2;
                 }
 
-                rx[..n1].copy_from_slice(&self.buffer[self.last_idx..]);
+                rx[..n1].copy_from_slice(&self.buffer[self.last_idx..self.last_idx+n1]);
                 rx[n1..(n1+n2)].copy_from_slice(&self.buffer[..n2]);
 
                 self.last_idx = new_last_idx;
@@ -121,7 +126,7 @@ impl<'a> UART<'a> {
                     n = rx.len();
                 }
 
-                rx[..n].copy_from_slice(&self.buffer[self.last_idx..dma_idx]);
+                rx[..n].copy_from_slice(&self.buffer[self.last_idx..self.last_idx+n]);
 
                 self.last_idx += n;
                 Some(&rx[..n])

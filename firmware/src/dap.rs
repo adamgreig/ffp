@@ -227,6 +227,7 @@ pub struct DAP<'a> {
     pins: &'a Pins<'a>,
     rbuf: [u8; 64],
     configured: bool,
+    swo_streaming: bool,
     match_retries: usize,
 }
 
@@ -235,10 +236,14 @@ impl <'a> DAP<'a> {
     {
         DAP {
             swd, uart, pins, rbuf: [0u8; 64],
-            configured: false, match_retries: 5,
+            configured: false, swo_streaming: false,
+            match_retries: 5,
         }
     }
 
+    /// Process a new CMSIS-DAP command from `report`.
+    ///
+    /// Returns Some(response) if a response should be transmitted.
     pub fn process_command(&mut self, report: &[u8]) -> Option<&[u8]> {
         let req = Request::from_report(report)?;
         match req.command {
@@ -268,6 +273,17 @@ impl <'a> DAP<'a> {
         }.map(|resp| resp.finished())
     }
 
+    /// Returns true if SWO streaming is currently active.
+    pub fn is_swo_streaming(&self) -> bool {
+        self.uart.is_active() && self.swo_streaming
+    }
+
+    /// Polls the UART buffer for new SWO data, returning
+    /// any data ready for streaming out the SWO EP.
+    pub fn poll_swo(&mut self) -> Option<&[u8]> {
+        self.uart.read(&mut self.rbuf)
+    }
+
     fn process_info(&mut self, mut req: Request) -> Option<ResponseWriter> {
         let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
         match DAPInfoID::try_from(req.next_u8()) {
@@ -293,8 +309,8 @@ impl <'a> DAP<'a> {
                 // Bit 3: SWO Manchester not supported
                 // Bit 4: Atomic commands not supported
                 // Bit 5: Test Domain Timer not supported
-                // Bit 6: SWO Streaming Trace not supported
-                resp.write_u8(0b0000_0101);
+                // Bit 6: SWO Streaming Trace supported
+                resp.write_u8(0b0100_0101);
             },
             Ok(DAPInfoID::SWOTraceBufferSize) => {
                 resp.write_u8(4);
@@ -504,9 +520,15 @@ impl <'a> DAP<'a> {
         let transport = req.next_u8();
         match SWOTransport::try_from(transport) {
             Ok(SWOTransport::None) => {
+                self.swo_streaming = false;
                 resp.write_ok();
             },
             Ok(SWOTransport::DAPCommand) => {
+                self.swo_streaming = false;
+                resp.write_ok();
+            },
+            Ok(SWOTransport::USBEndpoint) => {
+                self.swo_streaming = true;
                 resp.write_ok();
             },
             _ => resp.write_err(),

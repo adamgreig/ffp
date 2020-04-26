@@ -59,7 +59,7 @@ pub static SPI_INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor {
     bDescriptorType: DescriptorType::Interface as u8,
     bInterfaceNumber: 0,
     bAlternateSetting: 0,
-    bNumEndpoints: 2,
+    bNumEndpoints: SPI_NUM_ENDPOINTS as u8,
     bInterfaceClass: 0xFF,
     bInterfaceSubClass: 0,
     bInterfaceProtocol: 0,
@@ -94,7 +94,7 @@ pub static DAP1_INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor 
     bDescriptorType: DescriptorType::Interface as u8,
     bInterfaceNumber: 1,
     bAlternateSetting: 0,
-    bNumEndpoints: 2,
+    bNumEndpoints: DAP1_NUM_ENDPOINTS as u8,
     bInterfaceClass: 0x03,
     bInterfaceSubClass: 0,
     bInterfaceProtocol: 0,
@@ -162,14 +162,14 @@ pub static DAP2_INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor 
     bDescriptorType: DescriptorType::Interface as u8,
     bInterfaceNumber: 2,
     bAlternateSetting: 0,
-    bNumEndpoints: 2,
+    bNumEndpoints: DAP2_NUM_ENDPOINTS as u8,
     bInterfaceClass: 0xFF,
     bInterfaceSubClass: 0,
     bInterfaceProtocol: 0,
     iInterface: 6,
 };
 
-const DAP2_NUM_ENDPOINTS: usize = 2;
+const DAP2_NUM_ENDPOINTS: usize = 3;
 pub static DAP2_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP2_NUM_ENDPOINTS] = [
     // EP3 OUT, BULK
     EndpointDescriptor {
@@ -186,6 +186,16 @@ pub static DAP2_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP2_NUM_ENDPOINTS] =
         bLength: size_of::<EndpointDescriptor>() as u8,
         bDescriptorType: DescriptorType::Endpoint as u8,
         bEndpointAddress: 0b1_000_0011,
+        bmAttributes: 0b00_00_00_10,
+        wMaxPacketSize: 64,
+        bInterval: 10,
+    },
+
+    // EP4 IN, BULK
+    EndpointDescriptor {
+        bLength: size_of::<EndpointDescriptor>() as u8,
+        bDescriptorType: DescriptorType::Endpoint as u8,
+        bEndpointAddress: 0b1_000_0100,
         bmAttributes: 0b00_00_00_10,
         wMaxPacketSize: 64,
         bInterval: 10,

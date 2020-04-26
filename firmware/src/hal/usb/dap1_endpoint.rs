@@ -55,7 +55,7 @@ impl Endpoint for DAP1Endpoint {
     }
 
     fn configure_endpoint(&self, usb: &usb::Instance) {
-        // Set up EP2R to be a didirectional interrupt endpoint,
+        // Set up EP2R to be a bidirectional interrupt endpoint,
         // with STAT_TX to nak and STAT_RX to valid,
         // and DTOG_TX and DTOG_RX both set to 0.
         let (stat_tx, stat_rx, dtog_rx, dtog_tx) =

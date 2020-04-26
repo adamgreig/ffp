@@ -14,11 +14,13 @@ mod control_endpoint;
 mod spi_endpoint;
 mod dap1_endpoint;
 mod dap2_endpoint;
+mod swo_endpoint;
 
 use control_endpoint::ControlEndpoint;
 use spi_endpoint::SPIEndpoint;
 use dap1_endpoint::DAP1Endpoint;
 use dap2_endpoint::DAP2Endpoint;
+use swo_endpoint::SWOEndpoint;
 
 use buffers::*;
 
@@ -29,6 +31,7 @@ pub struct USB {
     spi_endpoint: SPIEndpoint,
     dap1_endpoint: DAP1Endpoint,
     dap2_endpoint: DAP2Endpoint,
+    swo_endpoint: SWOEndpoint,
 }
 
 trait Endpoint {
@@ -65,6 +68,7 @@ impl USB {
                 spi_endpoint: SPIEndpoint::new(&mut EP1BUF, &mut BTABLE[1]),
                 dap1_endpoint: DAP1Endpoint::new(&mut EP2BUF, &mut BTABLE[2]),
                 dap2_endpoint: DAP2Endpoint::new(&mut EP3BUF, &mut BTABLE[3]),
+                swo_endpoint: SWOEndpoint::new(&mut EP4BUF, &mut BTABLE[4]),
             }
         }
     }
@@ -128,6 +132,7 @@ impl USB {
                 1 => self.spi_endpoint.process_transfer(&self.usb),
                 2 => self.dap1_endpoint.process_transfer(&self.usb),
                 3 => self.dap2_endpoint.process_transfer(&self.usb),
+                4 => self.swo_endpoint.process_transfer(&self.usb),
                 _ => None,
             };
 
@@ -194,6 +199,16 @@ impl USB {
         self.dap2_endpoint.transmit_slice(&self.usb, data);
     }
 
+    /// Check if SWO endpoint is currently busy transmitting data
+    pub fn dap2_swo_is_busy(&self) -> bool {
+        self.swo_endpoint.is_busy()
+    }
+
+    /// Transmit SWO streaming data back over the DAPv2 bulk interface
+    pub fn dap2_stream_swo(&mut self, data: &[u8]) {
+        self.swo_endpoint.transmit_slice(&self.usb, data);
+    }
+
     /// Indicate we can currently receive DAP requests
     pub fn dap_enable(&mut self) {
         self.dap1_endpoint.rx_valid(&self.usb);
@@ -224,6 +239,7 @@ impl USB {
         self.spi_endpoint.write_btable();
         self.dap1_endpoint.write_btable();
         self.dap2_endpoint.write_btable();
+        self.swo_endpoint.write_btable();
         // Set buffer table to start at BTABLE.
         // We write the entire register to avoid dealing with the shifted-by-3 field.
         write_reg!(usb, self.usb, BTABLE,
@@ -250,11 +266,9 @@ impl USB {
         self.spi_endpoint.reset_endpoint(&self.usb);
         self.dap1_endpoint.reset_endpoint(&self.usb);
         self.dap2_endpoint.reset_endpoint(&self.usb);
+        self.swo_endpoint.reset_endpoint(&self.usb);
 
         // Ensure all other endpoints are disabled
-        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP4R, STAT_TX, STAT_RX);
-        write_reg!(usb, self.usb, EP4R,
-                   STAT_TX: stat_disabled(stat_tx), STAT_RX: stat_disabled(stat_rx));
         let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP5R, STAT_TX, STAT_RX);
         write_reg!(usb, self.usb, EP5R,
                    STAT_TX: stat_disabled(stat_tx), STAT_RX: stat_disabled(stat_rx));
@@ -297,11 +311,10 @@ impl USB {
         self.spi_endpoint.configure_endpoint(&self.usb);
         self.dap1_endpoint.configure_endpoint(&self.usb);
         self.dap2_endpoint.configure_endpoint(&self.usb);
+        self.swo_endpoint.configure_endpoint(&self.usb);
 
         // Ensure all other endpoints are disabled by writing their current
         // values of STAT_TX/STAT_RX, setting them to 00 (disabled)
-        let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP4R, STAT_TX, STAT_RX);
-        write_reg!(usb, self.usb, EP4R, STAT_TX: stat_tx, STAT_RX: stat_rx);
         let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP5R, STAT_TX, STAT_RX);
         write_reg!(usb, self.usb, EP5R, STAT_TX: stat_tx, STAT_RX: stat_rx);
         let (stat_tx, stat_rx) = read_reg!(usb, self.usb, EP6R, STAT_TX, STAT_RX);

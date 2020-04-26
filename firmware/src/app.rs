@@ -78,6 +78,12 @@ impl<'a> App<'a> {
                 self.process_request(req);
             }
             self.nvic.unpend_usb();
+        } else if self.dap.is_swo_streaming() && !self.usb.dap2_swo_is_busy() {
+            // Poll for new UART data when streaming is enabled and
+            // the SWO endpoint is ready to transmit more data.
+            if let Some(data) = self.dap.poll_swo() {
+                self.usb.dap2_stream_swo(data);
+            }
         } else {
             // Sleep until an interrupt occurs
             cortex_m::asm::wfe();

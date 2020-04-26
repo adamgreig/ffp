@@ -55,7 +55,7 @@ impl Endpoint for DAP2Endpoint {
     }
 
     fn configure_endpoint(&self, usb: &usb::Instance) {
-        // Set up EP3R to be a didirectional bulk endpoint,
+        // Set up EP3R to be a bidirectional bulk endpoint,
         // with STAT_TX to nak and STAT_RX to valid,
         // and DTOG_TX and DTOG_RX both set to 0.
         let (stat_tx, stat_rx, dtog_rx, dtog_tx) =
