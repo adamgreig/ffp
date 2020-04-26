@@ -1,10 +1,10 @@
 # FFP: Flash/FPGA Programmer
 
 FFP is a dead-simple USB to bidirectional SPI bridge for programming iCE40
-FPGAs and their SPI flash. The hardware is an STM32F042 and not much else.
+FPGAs and SPI flashes. The hardware is an STM32F042 and not much else.
 Firmware and host software is written in Rust.
 
-The firmware additionally supports SWD via the CMSIS-DAP v1 protocol,
+The firmware additionally supports SWD via the CMSIS-DAP v1 and v2 protocols,
 so many debuggers such as [probe-rs], [OpenOCD], and [pyOCD] are able to
 use an FFP to debug and program Cortex-M and other microcontrollers.
 
