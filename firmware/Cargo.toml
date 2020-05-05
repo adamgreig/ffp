@@ -13,6 +13,8 @@ stm32ral = { version = "0.4.1", features = ["stm32f0x2", "rt"] }
 cortex-m-semihosting = "0.3.5"
 num_enum = { version = "0.4.3", default-features = false }
 git-version = "0.3.4"
+stable_deref_trait = {version="1.1.1", default_features=false}
+as-slice = "0.1.0"
 
 [profile.release]
 codegen-units = 1

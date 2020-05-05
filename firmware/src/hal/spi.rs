@@ -102,7 +102,7 @@ impl SPI {
         debug_assert!(rxdata.len() >= 64);
 
         // Set up DMA transfer (configures NDTR and MAR and enables streams)
-        dma.spi1_enable(txdata, &mut rxdata[..txdata.len()]);
+        dma.spi1_enable2(txdata, &mut rxdata[..txdata.len()]);
 
         // Start SPI transfer
         modify_reg!(spi, self.spi, CR1, SPE: Enabled);

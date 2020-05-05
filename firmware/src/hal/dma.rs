@@ -4,8 +4,63 @@
 use stm32ral::dma1 as dma;
 use stm32ral::{read_reg, write_reg, modify_reg};
 
+use core::ops::{Deref, DerefMut};
+use stable_deref_trait::StableDeref;
+use as_slice::AsSlice;
+
 const SPI_DR_OFFSET: u32 = 0x0C;
 const UART_DR_OFFSET: u32 = 0x24;
+
+pub unsafe trait Word {}
+unsafe impl Word for u8 {}
+
+pub unsafe trait DMAReadBuffer {
+    type Word;
+    fn dma_read_buffer(&self) -> (*const Self::Word, usize);
+}
+
+pub unsafe trait DMAWriteBuffer {
+    type Word;
+    fn dma_write_buffer(&mut self) -> (*mut Self::Word, usize);
+}
+
+unsafe impl <B, W> DMAReadBuffer for B
+where
+    B: Deref + StableDeref,
+    B::Target: AsSlice<Element=W>,
+    W: Word,
+{
+    type Word = W;
+
+    fn dma_read_buffer(&self) -> (*const Self::Word, usize) {
+        let slice = self.as_slice();
+        (slice.as_ptr(), slice.len())
+    }
+}
+
+pub unsafe trait DMAWriteTarget {
+    type Word;
+    fn as_dma_write_buffer(&mut self) -> (*mut Self::Word, usize);
+}
+
+unsafe impl <W: Word> DMAWriteTarget for [W] {
+    type Word = W;
+    fn as_dma_write_buffer(&mut self) -> (*mut Self::Word, usize) {
+        (self.as_mut_ptr(), self.len())
+    }
+}
+
+unsafe impl <B, T> DMAWriteBuffer for B
+where
+    B: DerefMut<Target = T> + StableDeref,
+    T: DMAWriteTarget + ?Sized,
+{
+    type Word = T::Word;
+
+    fn dma_write_buffer(&mut self) -> (*mut Self::Word, usize) {
+        self.as_dma_write_buffer()
+    }
+}
 
 pub struct DMA {
     dma: dma::Instance,
@@ -43,6 +98,22 @@ impl DMA {
         write_reg!(dma, self.dma, NDTR3, tx.len() as u32);
         write_reg!(dma, self.dma, MAR2, rx.as_mut_ptr() as u32);
         write_reg!(dma, self.dma, MAR3, tx.as_ptr() as u32);
+        modify_reg!(dma, self.dma, CR2, EN: Enabled);
+        modify_reg!(dma, self.dma, CR3, EN: Enabled);
+    }
+
+    pub fn spi1_enable2<R, W>(&self, tx: R, mut rx: W)
+    where
+        R: DMAReadBuffer,
+        W: DMAWriteBuffer,
+    {
+        let (src_ptr, src_len) = tx.dma_read_buffer();
+        let (dst_ptr, dst_len) = rx.dma_write_buffer();
+        write_reg!(dma, self.dma, IFCR, CGIF2: Clear, CGIF3: Clear);
+        write_reg!(dma, self.dma, NDTR2, dst_len as u32);
+        write_reg!(dma, self.dma, NDTR3, src_len as u32);
+        write_reg!(dma, self.dma, MAR2, dst_ptr as u32);
+        write_reg!(dma, self.dma, MAR3, src_ptr as u32);
         modify_reg!(dma, self.dma, CR2, EN: Enabled);
         modify_reg!(dma, self.dma, CR3, EN: Enabled);
     }
