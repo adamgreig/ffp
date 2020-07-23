@@ -437,10 +437,13 @@ impl <'a> DAP<'a> {
 
         // If reset bit is in mask, apply output bit to pin
         if (mask & NRESET_MASK) != 0 {
-            if output & NRESET_MASK != 0 {
-                self.pins.flash_so.set_high();
+            if output & NRESET_MASK == 0 {
+                // This command might be called to assert reset before
+                // the DAP_Connect command which configures the I/O.
+                self.pins.flash_so.set_otype_opendrain().set_low().set_mode_output();
             } else {
-                self.pins.flash_so.set_low();
+                // Set pin back to high-z when not being asserted.
+                self.pins.flash_so.set_mode_input();
             }
         }
 
