@@ -384,10 +384,14 @@ impl<'a> Pins<'a> {
             .set_mode_input();
 
         // Push-pull SPI MISO to Flash (FPGA MOSI). Starts high-impedance.
+        // We also default to high so that when it is used as an open-drain
+        // output for SWD mode (as the nRESET pin), it does not immediately
+        // trigger a reset.
         self.flash_so
             .set_af(0)
             .set_otype_pushpull()
             .set_ospeed_veryhigh()
+            .set_high()
             .set_mode_input();
 
         // Push-pull SPI MOSI to Flash (FPGA MISO). Starts high-impedance.
@@ -451,7 +455,7 @@ impl<'a> Pins<'a> {
         self.sck.set_mode_input();
         self.flash_so.set_mode_input();
         self.flash_si.set_mode_input();
-        self.fpga_so.set_mode_input();
+        self.fpga_so.set_mode_input().set_high();
         self.fpga_si.set_mode_input();
         self.fpga_rst.set_mode_input();
     }
@@ -461,6 +465,9 @@ impl<'a> Pins<'a> {
     /// * fpga_so pin is always MISO
     /// * flash_si pin is MOSI when we drive SWDIO or input when target drives it
     /// * flash_so is output open-drain for nRESET
+    /// We don't change the actual state of flash_so in case it's already been
+    /// used to drive nRESET low before attaching, but we reset it to high both
+    /// at startup and after SWD detach.
     pub fn swd_mode(&self) {
         self.cs.set_mode_alternate();
         self.sck.set_mode_alternate().set_pull_up();
