@@ -410,6 +410,12 @@ impl <'a> DAP<'a> {
         let mask = req.next_u8();
         let wait = req.next_u32();
 
+        // CMSIS-DAP specifies 3s as maximum wait
+        if wait > 3000000 {
+            resp.write_err();
+            return Some(resp);
+        }
+
         // Our pin mapping:
         // SWDIO/TMS: FLASH_SI
         // SWCLK/TCK: SCK
@@ -447,7 +453,7 @@ impl <'a> DAP<'a> {
             }
         }
 
-        // Delay required time in µs
+        // Delay required time in µs (approximate)
         cortex_m::asm::delay(42 * wait);
 
         // Read and return pin state
