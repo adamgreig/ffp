@@ -464,7 +464,7 @@ impl<'a> Pins<'a> {
     pub fn swd_mode(&self) {
         self.cs.set_mode_alternate();
         self.sck.set_mode_alternate().set_pull_up();
-        self.flash_so.set_otype_opendrain().set_high().set_mode_output();
+        self.flash_so.set_otype_opendrain().set_mode_output();
         self.flash_si.set_mode_alternate();
         self.fpga_so.set_mode_alternate();
         self.fpga_si.set_mode_input();
