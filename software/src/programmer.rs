@@ -12,6 +12,7 @@ enum Command {
     SetTPwr = 4,
     SetLED = 6,
     Bootload = 7,
+    SetMCUReset = 8,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -20,6 +21,7 @@ enum Mode {
     HighZ = 0,
     Flash = 1,
     FPGA = 2,
+    JTAG = 3,
 }
 
 /// Interface to FFP hardware
@@ -113,6 +115,16 @@ impl Programmer {
         self.set(Command::SetFPGAReset, 1)
     }
 
+    /// Assert the MCU reset signal
+    pub fn reset_mcu(&self) -> Result<()> {
+        self.set(Command::SetMCUReset, 0)
+    }
+
+    /// Deassert the MCU reset signal
+    pub fn unreset_mcu(&self) -> Result<()> {
+        self.set(Command::SetMCUReset, 1)
+    }
+
     /// Assert SPI CS
     pub fn select(&self) -> Result<()> {
         self.set(Command::SetCS, 0)
@@ -136,6 +148,10 @@ impl Programmer {
     /// Set SPI pins to fpga mode (for communicating with FPGA)
     pub fn fpga_mode(&self) -> Result<()> {
         self.set(Command::SetMode, Mode::FPGA as u16)
+    }
+
+    pub fn jtag_mode(&self) -> Result<()> {
+        self.set(Command::SetMode, Mode::JTAG as u16)
     }
 
     /// Enable target power switch on FFP
@@ -171,6 +187,19 @@ impl Programmer {
             }
         }
         Ok(rx)
+    }
+
+    /// Execute a JTAG sequence with the given sequence request bytes.
+    /// Expects to read back `rxlen` bytes.
+    pub fn jtag_sequence(&self, data: &[u8], rxlen: usize) -> Result<Vec<u8>> {
+        let mut rxbuf = vec![0u8; rxlen];
+        let timeout = Duration::from_millis(100);
+        self.handle.write_bulk(Self::TX_EP, &data, timeout).context("Error writing data")?;
+        match self.handle.read_bulk(Self::RX_EP, &mut rxbuf, timeout) {
+            Ok(n) if n == rxlen => Ok(rxbuf),
+            Ok(n) => Err(FFPError::NotEnoughData { expected: rxlen, read: n })?,
+            Err(e) => Err(FFPError::USBError(e)).context("Error reading JTAG data")?,
+        }
     }
 
     /// Issue a control request to a specific value

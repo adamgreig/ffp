@@ -368,6 +368,20 @@ impl ControlEndpoint {
                 None
             },
 
+            Ok(VendorRequest::SetMCU) => {
+                match PinState::try_from(setup.wValue) {
+                    Ok(ps) => {
+                        self.pending_request = Some(
+                            USBStackRequest::AppRequest(Request::SetMCU(ps)));
+                        self.transmit_ack(usb);
+                    },
+                    _ => {
+                        self.stall(usb);
+                    },
+                }
+                None
+            },
+
             Ok(VendorRequest::SetMode) => {
                 match Mode::try_from(setup.wValue) {
                     Ok(mode) => {

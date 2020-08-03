@@ -3,10 +3,12 @@ use failure_derive::Fail;
 mod programmer;
 mod flash;
 mod fpga;
+mod jtag;
 
 pub use programmer::Programmer;
 pub use flash::Flash;
 pub use fpga::FPGA;
+pub use jtag::JTAG;
 
 #[derive(Fail, Debug)]
 pub enum FFPError {

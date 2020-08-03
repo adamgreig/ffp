@@ -14,6 +14,7 @@ pub mod hal;
 pub mod app;
 pub mod swd;
 pub mod dap;
+pub mod jtag;
 
 #[pre_init]
 unsafe fn pre_init() {
@@ -71,11 +72,12 @@ fn main() -> ! {
     };
 
     let swd = swd::SWD::new(&spi, &pins);
+    let jtag = jtag::JTAG::new(&pins);
     let mut dap = dap::DAP::new(swd, &mut uart, &pins);
 
     // Create App instance with the HAL instances
     let mut app = app::App::new(
-        &flash, &rcc, &nvic, &dma, &pins, &spi, &mut usb, &mut dap);
+        &flash, &rcc, &nvic, &dma, &pins, &spi, &jtag, &mut usb, &mut dap);
 
     // Initialise application, including system peripherals
     app.setup();

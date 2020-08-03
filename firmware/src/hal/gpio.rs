@@ -230,6 +230,14 @@ impl<'a> Pin<'a> {
         };
     }
 
+    pub fn set_bool(&self, state: bool) {
+        if state {
+            self.set_high();
+        } else {
+            self.set_low();
+        }
+    }
+
     pub fn get_state(&self) -> PinState {
         match self.port.get_pin_idr(self.n) {
             0 => PinState::Low,
@@ -435,7 +443,7 @@ impl<'a> Pins<'a> {
         self.flash_si.set_mode_input();
         self.fpga_so.set_mode_alternate();
         self.fpga_si.set_mode_alternate();
-        self.fpga_rst.set_mode_output();
+        self.fpga_rst.set_otype_opendrain().set_mode_output();
     }
 
     /// Place SPI pins into flash-programming mode
@@ -446,7 +454,7 @@ impl<'a> Pins<'a> {
         self.fpga_si.set_mode_input();
         self.flash_so.set_otype_pushpull().set_mode_alternate();
         self.flash_si.set_mode_alternate();
-        self.fpga_rst.set_mode_output();
+        self.fpga_rst.set_otype_opendrain().set_mode_output();
     }
 
     /// Place SPI pins into high-impedance mode
@@ -457,7 +465,7 @@ impl<'a> Pins<'a> {
         self.flash_si.set_mode_input();
         self.fpga_so.set_mode_input().set_high();
         self.fpga_si.set_mode_input();
-        self.fpga_rst.set_mode_input();
+        self.fpga_rst.set_otype_opendrain().set_mode_output();
     }
 
     /// Place SPI pins into SWD mode:
@@ -476,6 +484,26 @@ impl<'a> Pins<'a> {
         self.fpga_so.set_mode_alternate();
         self.fpga_si.set_mode_input();
         self.fpga_rst.set_mode_input();
+    }
+
+    /// Place pins into JTAG mode:
+    /// * sck pin is output push-pull for JTCK
+    /// * flash_si is output push-pull for JTMS
+    /// * cs is input for JTDO
+    /// * fpga_rst is output push-pull for JTDI
+    /// * flash_so pin is output open-drain for nRESET
+    /// Other pins are left in high-impedance mode.
+    /// We don't change the state of flash_so in case it's already been used to
+    /// drive nRESET low before attaching to a target, but it is reset to high
+    /// both at startup and after detaching.
+    pub fn jtag_mode(&self) {
+        self.sck.set_mode_output();
+        self.flash_si.set_mode_output();
+        self.cs.set_mode_input();
+        self.fpga_rst.set_otype_pushpull().set_mode_output();
+        self.flash_so.set_otype_opendrain().set_mode_output();
+        self.fpga_si.set_mode_input();
+        self.fpga_so.set_mode_input();
     }
 
     /// Disconnect MOSI from flash_si, target drives the bus

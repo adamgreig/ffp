@@ -42,6 +42,7 @@ pub enum VendorRequest {
     GetTPwr = 5,
     SetLED = 6,
     Bootload = 7,
+    SetMCU = 8,
     GetOSFeature = b'A',
 }
 

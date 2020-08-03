@@ -3,7 +3,7 @@ use std::io::prelude::*;
 use std::time::Instant;
 use clap::{Arg, App, AppSettings, SubCommand};
 use clap::{value_t, crate_authors, crate_description, crate_version};
-use ffp::{Programmer, Flash, FPGA};
+use ffp::{Programmer, Flash, FPGA, JTAG};
 
 #[allow(clippy::cognitive_complexity)]
 fn main() -> ffp::Result<()> {
@@ -83,6 +83,11 @@ fn main() -> ffp::Result<()> {
                              .help("Start address (in bytes) to read from")
                              .long("offset")
                              .default_value("0"))))
+        .subcommand(SubCommand::with_name("jtag")
+            .about("JTAG")
+            .setting(AppSettings::SubcommandRequiredElseHelp)
+            .subcommand(SubCommand::with_name("id")
+                        .about("Read IDCODE")))
         .subcommand(SubCommand::with_name("bootload")
             .about("Reset FFP hardware into USB bootloader"))
         .subcommand(SubCommand::with_name("devices")
@@ -185,6 +190,16 @@ fn main() -> ffp::Result<()> {
                     let mut file = File::create(path)?;
                     let data = flash.read(offset, length)?;
                     file.write_all(&data)?;
+                },
+                _ => panic!(),
+            }
+        },
+        Some("jtag") => {
+            let jtag = JTAG::new(&programmer);
+            let matches = matches.subcommand_matches("jtag").unwrap();
+            match matches.subcommand_name() {
+                Some("id") => {
+                    jtag.demo()?;
                 },
                 _ => panic!(),
             }

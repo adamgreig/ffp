@@ -2,7 +2,7 @@
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
 use num_enum::TryFromPrimitive;
-use crate::{hal, dap};
+use crate::{hal, dap, jtag};
 
 #[derive(Copy, Clone, TryFromPrimitive)]
 #[repr(u16)]
@@ -17,6 +17,7 @@ pub enum Mode {
     HighImpedance = 0,
     Flash = 1,
     FPGA = 2,
+    JTAG = 3,
 }
 
 #[derive(Copy, Clone)]
@@ -25,6 +26,7 @@ pub enum Request {
     SetFPGA(PinState),
     SetTPwr(PinState),
     SetLED(PinState),
+    SetMCU(PinState),
     SetMode(Mode),
     GetTPwr,
     Bootload,
@@ -41,18 +43,24 @@ pub struct App<'a> {
     dma: &'a hal::dma::DMA,
     pins: &'a hal::gpio::Pins<'a>,
     spi: &'a hal::spi::SPI,
+    jtag: &'a jtag::JTAG<'a>,
     usb: &'a mut hal::usb::USB,
     dap: &'a mut dap::DAP<'a>,
+
+    mode: Mode,
 }
 
 impl<'a> App<'a> {
     pub fn new(flash: &'a hal::flash::Flash, rcc: &'a hal::rcc::RCC,
                nvic: &'a hal::nvic::NVIC, dma: &'a hal::dma::DMA,
                pins: &'a hal::gpio::Pins<'a>, spi: &'a hal::spi::SPI,
-               usb: &'a mut hal::usb::USB, dap: &'a mut dap::DAP<'a>) -> Self
+               jtag: &'a jtag::JTAG<'a>, usb: &'a mut hal::usb::USB,
+               dap: &'a mut dap::DAP<'a>)
+        -> Self
     {
         App {
-            flash, rcc, nvic, dma, pins, spi, usb, dap,
+            flash, rcc, nvic, dma, pins, spi, jtag, usb, dap,
+            mode: Mode::HighImpedance,
         }
     }
 
@@ -96,30 +104,55 @@ impl<'a> App<'a> {
             Request::SetFPGA(state) => self.pins.fpga_rst.set_state(state),
             Request::SetTPwr(state) => self.pins.tpwr_en.set_state(state),
             Request::SetLED(state) => self.pins.led.set_state(state),
+            Request::SetMCU(state) => self.pins.flash_so.set_state(state),
             Request::SetMode(mode) => match mode {
                 Mode::HighImpedance => {
+                    self.mode = mode;
                     self.pins.high_impedance_mode();
                     self.usb.spi_data_disable();
                     self.usb.dap_enable();
                     self.spi.disable();
                 },
                 Mode::Flash => {
+                    self.mode = mode;
                     self.pins.flash_mode();
                     self.usb.spi_data_enable();
                     self.usb.dap_disable();
                     self.spi.setup_spi();
                 },
                 Mode::FPGA => {
+                    self.mode = mode;
                     self.pins.fpga_mode();
                     self.usb.spi_data_enable();
                     self.usb.dap_disable();
                     self.spi.setup_spi();
                 },
+                Mode::JTAG => {
+                    self.mode = mode;
+                    self.pins.jtag_mode();
+                    self.usb.spi_data_enable();
+                    self.usb.dap_disable();
+                    self.spi.disable();
+                },
             },
             Request::SPITransmit((txdata, n)) => {
                 let mut rxdata = [0u8; 64];
-                self.spi.exchange(&self.dma, &txdata[..n], &mut rxdata);
-                self.usb.spi_data_reply(&rxdata[..n]);
+                match self.mode {
+                    // Handle raw SPI exchange in Flash and FPGA modes
+                    Mode::Flash | Mode::FPGA => {
+                        self.spi.exchange(&self.dma, &txdata[..n], &mut rxdata);
+                        self.usb.spi_data_reply(&rxdata[..n]);
+                    },
+
+                    // Handle JTAG exchange with length and TMS metadata.
+                    Mode::JTAG => {
+                        let rxlen = self.jtag.sequences(&txdata[..n], &mut rxdata[..]);
+                        self.usb.spi_data_reply(&rxdata[..rxlen]);
+                    },
+
+                    // Ignore SPI requests in other modes.
+                    _ => (),
+                }
             },
             Request::DAP1Command((report, n)) => {
                 let response = self.dap.process_command(&report[..n]);
