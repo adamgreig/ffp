@@ -36,26 +36,30 @@ impl<'a> JTAG<'a> {
 
         let request = SequenceBuilder::new()
             // Write TMS=1 for 5 clocks to ensure we are in test-logic-reset.
-            .add_mode(5, 1)
+            .mode(5, 1)
             // Enter run-test/idle
-            .add_mode(1, 0)
+            .mode(1, 0)
+            // Enter select-dr-scan
+            .mode(1, 1)
+            /*
             // Enter select-dr-scan, select-ir-scan
-            .add_mode(2, 1)
+            .mode(2, 1)
             // Enter capture-ir, shift-ir
-            .add_mode(2, 0)
+            .mode(2, 0)
             // Write IR: both TAPs to IDCODE (first 8 bits, with TMS=0)
-            .add_write(8, 0, &[0b0001_1110])
+            .write(8, 0, &[0b0001_1110])
             // Write IR: both TAPs to IDCODE (final bit, with TMS=1),
             // and move to exit1-ir, update-ir, select-dr-scan
-            .add_write(3, 1, &[0b0])
+            .write(3, 1, &[0b0])
+            */
             // Enter capture-dr, shift-dr
-            .add_mode(2, 0)
+            .mode(2, 0)
             // Read first DR
-            .add_read(32, 0)
+            .read(32, 0)
             // Read second DR
-            .add_read(32, 0)
+            .read(32, 0)
             // Enter exit1-dr, update-dr, select-dr-scan, select-ir-scan, test-logic-reset
-            .add_mode(5, 1);
+            .mode(5, 1);
 
         let data = request.execute(self.programmer)?;
 
@@ -82,7 +86,7 @@ impl SequenceBuilder {
         }
     }
 
-    pub fn add_request(mut self, len: usize, tms: u8, tdi: Option<&[u8]>, capture: bool)
+    pub fn request(mut self, len: usize, tms: u8, tdi: Option<&[u8]>, capture: bool)
         -> Self
     {
         let nbytes = bytes_for_bits(len);
@@ -112,16 +116,16 @@ impl SequenceBuilder {
         self
     }
 
-    pub fn add_write(self, len: usize, tms: u8, tdi: &[u8]) -> Self {
-        self.add_request(len, tms, Some(tdi), false)
+    pub fn write(self, len: usize, tms: u8, tdi: &[u8]) -> Self {
+        self.request(len, tms, Some(tdi), false)
     }
 
-    pub fn add_mode(self, len: usize, tms: u8) -> Self {
-        self.add_request(len, tms, None, false)
+    pub fn mode(self, len: usize, tms: u8) -> Self {
+        self.request(len, tms, None, false)
     }
 
-    pub fn add_read(self, len: usize, tms: u8) -> Self {
-        self.add_request(len, tms, None, true)
+    pub fn read(self, len: usize, tms: u8) -> Self {
+        self.request(len, tms, None, true)
     }
 
     fn to_bytes(self) -> Vec<u8> {
