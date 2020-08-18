@@ -12,11 +12,11 @@ impl<'a> JTAG<'a> {
         Self { programmer }
     }
 
-    /// Reset the attached FPGA
+    /// Reset the attached target
     pub fn reset(&self) -> Result<()> {
-        self.programmer.reset()?;
+        self.programmer.reset_mcu()?;
         sleep(Duration::from_millis(10));
-        self.programmer.unreset()
+        self.programmer.unreset_mcu()
     }
 
     /// Enable target power
@@ -29,11 +29,11 @@ impl<'a> JTAG<'a> {
         self.programmer.power_off()
     }
 
-    pub fn demo(&self) -> Result<()> {
+    /// Read all IDCODEs on the JTAG scan chain.
+    pub fn idcodes(&self) -> Result<Vec<u32>> {
         self.programmer.jtag_mode()?;
-        self.programmer.reset_mcu()?;
-        self.programmer.unreset_mcu()?;
 
+        // Set all devices up for a read of IDCODE
         let request = SequenceBuilder::new()
             // Write TMS=1 for 5 clocks to ensure we are in test-logic-reset.
             .mode(5, 1)
@@ -41,36 +41,43 @@ impl<'a> JTAG<'a> {
             .mode(1, 0)
             // Enter select-dr-scan
             .mode(1, 1)
-            /*
-            // Enter select-dr-scan, select-ir-scan
-            .mode(2, 1)
-            // Enter capture-ir, shift-ir
-            .mode(2, 0)
-            // Write IR: both TAPs to IDCODE (first 8 bits, with TMS=0)
-            .write(8, 0, &[0b0001_1110])
-            // Write IR: both TAPs to IDCODE (final bit, with TMS=1),
-            // and move to exit1-ir, update-ir, select-dr-scan
-            .write(3, 1, &[0b0])
-            */
             // Enter capture-dr, shift-dr
             .mode(2, 0)
-            // Read first DR
-            .read(32, 0)
-            // Read second DR
-            .read(32, 0)
-            // Enter exit1-dr, update-dr, select-dr-scan, select-ir-scan, test-logic-reset
-            .mode(5, 1);
+            // Read first IDCODE
+            .read(32, 0);
 
-        let data = request.execute(self.programmer)?;
+        let mut idcodes = Vec::new();
+        let mut data = request.execute(self.programmer)?;
+        let mut idcode = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
 
-        let idcode1 = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-        let idcode2 = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-        println!("IDCODE1=0x{:08X} IDCODE2=0x{:08X}", idcode1, idcode2);
+        // Read subsequent IDCODEs
+        let request = SequenceBuilder::new().read(32, 0);
+
+        // TODO: How do we handle devices without IDCODE which enter BYPASS?
+
+        // Loop over all the incoming IDCODEs
+        while idcode != 0xFFFF_FFFF && idcode != 0x0000_0000 {
+            idcodes.push(idcode);
+            data = request.clone().execute(self.programmer)?;
+            idcode = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        }
+
+        Ok(idcodes)
+    }
+
+    /// Scan through and print all IDCODEs on the scan chain
+    pub fn print_idcodes(&self) -> Result<()> {
+        let idcodes = self.idcodes()?;
+        for idcode in idcodes.iter() {
+            println!("Read IDCODE: 0x{:08X}", idcode);
+        }
+        println!("Read {} IDCODEs in total.", idcodes.len());
 
         Ok(())
     }
 }
 
+#[derive(Clone)]
 pub struct SequenceBuilder {
     num_sequences: usize,
     capture_length: usize,
@@ -126,6 +133,10 @@ impl SequenceBuilder {
 
     pub fn read(self, len: usize, tms: u8) -> Self {
         self.request(len, tms, None, true)
+    }
+
+    pub fn test_logic_reset(self) -> Self {
+        self.mode(5, 1)
     }
 
     fn to_bytes(self) -> Vec<u8> {

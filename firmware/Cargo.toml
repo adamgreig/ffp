@@ -9,7 +9,7 @@ cortex-m = "0.6.3"
 cortex-m-rt = "0.6.12"
 panic-halt = "0.2.0"
 stm32ral = { version = "0.4.1", features = ["stm32f0x2", "rt"] }
-num_enum = { version = "0.5.0", default-features = false }
+num_enum = { version = "0.5.1", default-features = false }
 git-version = "0.3.4"
 
 [profile.release]

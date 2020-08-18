@@ -12,6 +12,7 @@ rusb = "0.5.2"
 clap = "~2.33.0"
 failure = "0.1"
 failure_derive = "0.1"
+num_enum = "0.5.1"
 
 [profile.release]
 lto = true

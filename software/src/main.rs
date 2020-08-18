@@ -3,7 +3,7 @@ use std::io::prelude::*;
 use std::time::Instant;
 use clap::{Arg, App, AppSettings, SubCommand};
 use clap::{value_t, crate_authors, crate_description, crate_version};
-use ffp::{Programmer, Flash, FPGA, JTAG};
+use ffp::{Programmer, SPIFlash, ICE40, ECP5, JTAG};
 
 #[allow(clippy::cognitive_complexity)]
 fn main() -> ffp::Result<()> {
@@ -35,8 +35,9 @@ fn main() -> ffp::Result<()> {
              .conflicts_with("serial")
              .takes_value(true)
              .global(true))
-        .subcommand(SubCommand::with_name("fpga")
-            .about("Reset, power, and program the FPGA")
+        .subcommand(SubCommand::with_name("ice40")
+            .alias("fpga")
+            .about("Reset, power, and program an iCE40 FPGA connected via SPI")
             .setting(AppSettings::SubcommandRequiredElseHelp)
             .subcommand(SubCommand::with_name("reset")
                         .about("Reset the FPGA"))
@@ -51,7 +52,7 @@ fn main() -> ffp::Result<()> {
                              .help("File to program to FPGA")
                              .required(true))))
         .subcommand(SubCommand::with_name("flash")
-            .about("Read/write flash memory")
+            .about("Read/write SPI flash memory")
             .setting(AppSettings::SubcommandRequiredElseHelp)
             .subcommand(SubCommand::with_name("id")
                         .about("Read flash ID"))
@@ -84,10 +85,30 @@ fn main() -> ffp::Result<()> {
                              .long("offset")
                              .default_value("0"))))
         .subcommand(SubCommand::with_name("jtag")
-            .about("JTAG")
+            .about("Basic JTAG operations")
             .setting(AppSettings::SubcommandRequiredElseHelp)
             .subcommand(SubCommand::with_name("id")
-                        .about("Read IDCODE")))
+                        .about("Read IDCODEs of scan chain"))
+            .subcommand(SubCommand::with_name("reset")
+                        .about("Reset the target JTAG device"))
+            .subcommand(SubCommand::with_name("power")
+                        .about("Control target power from FFP board")
+                        .arg(Arg::with_name("power")
+                             .possible_values(&["on", "off"])
+                             .required(true))))
+        .subcommand(SubCommand::with_name("ecp5")
+            .about("Control ECP5 FPGAs via JTAG")
+            .setting(AppSettings::SubcommandRequiredElseHelp)
+            .arg(Arg::with_name("scan-index")
+                 .help("JTAG scan chain index of ECP5")
+                 .long("scan-index")
+                 .default_value("0"))
+            .subcommand(SubCommand::with_name("scan")
+                        .about("Scan JTAG chain for an ECP5 IDCODE"))
+            .subcommand(SubCommand::with_name("reset")
+                        .about("Pulse the JTAG nRST line"))
+            .subcommand(SubCommand::with_name("status")
+                        .about("Read ECP5 status register")))
         .subcommand(SubCommand::with_name("bootload")
             .about("Reset FFP hardware into USB bootloader"))
         .subcommand(SubCommand::with_name("devices")
@@ -125,39 +146,39 @@ fn main() -> ffp::Result<()> {
     }?;
 
     match matches.subcommand_name() {
-        Some("fpga") => {
-            let fpga = FPGA::new(&programmer);
-            let matches = matches.subcommand_matches("fpga").unwrap();
+        Some("ice40") => {
+            let ice40 = ICE40::new(&programmer);
+            let matches = matches.subcommand_matches("ice40").unwrap();
             match matches.subcommand_name() {
                 Some("reset") => {
-                    if !quiet { println!("Resetting FPGA") };
-                    fpga.reset()?;
+                    if !quiet { println!("Resetting iCE40") };
+                    ice40.reset()?;
                 },
                 Some("power") => {
                     let matches = matches.subcommand_matches("power").unwrap();
                     let arg = matches.value_of("power").unwrap();
                     if arg == "on" {
                         if !quiet { println!("Turning on target power") };
-                        fpga.power_on()?;
+                        ice40.power_on()?;
                     } else if arg == "off" {
                         if !quiet { println!("Turning off target power") };
-                        fpga.power_off()?;
+                        ice40.power_off()?;
                     }
                 },
                 Some("program") => {
-                    if !quiet { println!("Programming FPGA") };
+                    if !quiet { println!("Programming iCE40") };
                     let matches = matches.subcommand_matches("program").unwrap();
                     let path = matches.value_of("file").unwrap();
                     let mut file = File::open(path)?;
                     let mut data = Vec::new();
                     file.read_to_end(&mut data)?;
-                    fpga.program(&data)?;
+                    ice40.program(&data)?;
                 },
                 _ => panic!(),
             }
         },
         Some("flash") => {
-            let flash = Flash::new(&programmer);
+            let flash = SPIFlash::new(&programmer);
             let id = flash.read_id().expect("Error reading flash ID");
             if !quiet { println!("Flash ID: {}", id) };
             let matches = matches.subcommand_matches("flash").unwrap();
@@ -199,7 +220,43 @@ fn main() -> ffp::Result<()> {
             let matches = matches.subcommand_matches("jtag").unwrap();
             match matches.subcommand_name() {
                 Some("id") => {
-                    jtag.demo()?;
+                    jtag.print_idcodes()?;
+                },
+                Some("reset") => {
+                    if !quiet { println!("Resetting JTAG") };
+                    jtag.reset()?;
+                },
+                Some("power") => {
+                    let matches = matches.subcommand_matches("power").unwrap();
+                    let arg = matches.value_of("power").unwrap();
+                    if arg == "on" {
+                        if !quiet { println!("Turning on target power") };
+                        jtag.power_on()?;
+                    } else if arg == "off" {
+                        if !quiet { println!("Turning off target power") };
+                        jtag.power_off()?;
+                    }
+                },
+                _ => panic!(),
+            }
+        },
+        Some("ecp5") => {
+            let matches = matches.subcommand_matches("ecp5").unwrap();
+            let idx = value_t!(matches.value_of("scan-index"), usize).unwrap();
+            let ecp5 = ECP5::new(&programmer, idx);
+            match matches.subcommand_name() {
+                Some("scan") => {
+                    let (idcode, idx) = ECP5::scan(&programmer)?;
+                    println!("Found {} (0x{:08X}) at index {}.",
+                             idcode.name(), idcode as u32, idx);
+                },
+                Some("reset") => {
+                    if !quiet { println!("Resetting JTAG") };
+                    ecp5.reset()?;
+                },
+                Some("status") => {
+                    let status = ecp5.status()?;
+                    println!("{:?}", status);
                 },
                 _ => panic!(),
             }

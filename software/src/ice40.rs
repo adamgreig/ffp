@@ -3,18 +3,18 @@ use std::time::Duration;
 use failure::ResultExt;
 use crate::{Programmer, Flash, Result};
 
-/// FPGA manager
-pub struct FPGA<'a> {
+/// iCE40 FPGA manager
+pub struct ICE40<'a> {
     programmer: &'a Programmer,
 }
 
-impl<'a> FPGA<'a> {
-    /// Create a new `FPGA` using the given `Programmer`
+impl<'a> ICE40<'a> {
+    /// Create a new `ICE40` using the given `Programmer`
     pub fn new(programmer: &'a Programmer) -> Self {
         Self { programmer }
     }
 
-    /// Reset the attached FPGA
+    /// Reset the attached iCE40
     pub fn reset(&self) -> Result<()> {
         self.programmer.reset()?;
         sleep(Duration::from_millis(10));
@@ -31,21 +31,21 @@ impl<'a> FPGA<'a> {
         self.programmer.power_off()
     }
 
-    /// Program the attached FPGA with the provided bitstream
+    /// Program the attached iCE40 with the provided bitstream
     ///
-    /// The FPGA will be reset and start executing after programming completion.
+    /// The iCE40 will be reset and start executing after programming completion.
     pub fn program(&self, data: &[u8]) -> Result<()> {
-        // Hold FPGA in reset while we power down the flash
+        // Hold iCE40 in reset while we power down the flash
         self.programmer.reset()?;
         let flash = Flash::new(self.programmer);
         flash.power_down()?;
 
-        // Release FPGA from reset while in slave SPI mode
+        // Release iCE40 from reset while in slave SPI mode
         self.programmer.fpga_mode()?;
         self.programmer.select()?;
         self.programmer.unreset()?;
 
-        // Wait for FPGA to come out of reset
+        // Wait for iCE40 to come out of reset
         sleep(Duration::from_millis(10));
 
         // Send 8 dummy clocks with CS high then re-assert CS

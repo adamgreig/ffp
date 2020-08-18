@@ -2,13 +2,15 @@ use failure_derive::Fail;
 
 mod programmer;
 mod flash;
-mod fpga;
+mod ice40;
 mod jtag;
+mod ecp5;
 
 pub use programmer::Programmer;
-pub use flash::Flash;
-pub use fpga::FPGA;
+pub use flash::{Flash, SPIFlash, FlashAccess};
+pub use ice40::ICE40;
 pub use jtag::JTAG;
+pub use ecp5::ECP5;
 
 #[derive(Fail, Debug)]
 pub enum FFPError {
@@ -32,6 +34,9 @@ pub enum FFPError {
 
     #[fail(display="An unknown error has occurred.")]
     UnknownError,
+
+    #[fail(display="No ECP5 device found.")]
+    ECP5NotFound,
 }
 
 impl From<rusb::Error> for FFPError {

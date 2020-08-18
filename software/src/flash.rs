@@ -43,20 +43,95 @@ impl std::fmt::Display for FlashID {
     }
 }
 
-/// Flash manager
-pub struct Flash<'a> {
-    programmer: &'a Programmer,
+pub trait FlashAccess {
+    fn enable(&self) -> Result<()>;
+    fn select(&self) -> Result<()>;
+    fn unselect(&self) -> Result<()>;
+    fn write(&self, data: &[u8]) -> Result<Vec<u8>>;
 }
 
-impl<'a> Flash<'a> {
+impl FlashAccess for &Programmer {
+    fn enable(&self) -> Result<()> {
+        (self as &Programmer).flash_mode()
+    }
+
+    fn select(&self) -> Result<()> {
+        (self as &Programmer).select()
+    }
+
+    fn unselect(&self) -> Result<()> {
+        (self as &Programmer).unselect()
+    }
+
+    fn write(&self, data: &[u8]) -> Result<Vec<u8>> {
+        (self as &Programmer).write(data)
+    }
+}
+
+/// Directly attached SPI flash manager.
+pub struct SPIFlash<'a> {
+    programmer: &'a Programmer,
+    flash: Flash<&'a Programmer>,
+}
+
+impl<'a> SPIFlash<'a> {
     /// Create a new `Flash` using the given `Programmer`
     pub fn new(programmer: &'a Programmer) -> Self {
-        Self { programmer }
+        Self { programmer, flash: Flash::new(programmer) }
     }
 
     /// Read the attached flash device, manufacturer, and unique IDs
     pub fn read_id(&self) -> Result<FlashID> {
         self.programmer.reset()?;
+        self.flash.read_id()
+    }
+
+    /// Read `length` bytes of data from the attached flash, starting at `address`
+    pub fn read(&self, address: u32, length: usize) -> Result<Vec<u8>> {
+        self.flash.read(address, length)
+    }
+
+    /// Program the attached flash with `data` starting at `address`.
+    ///
+    /// If `verify` is true, also read-back the programmed data and
+    /// return FFPError::ReadbackError if it did not match what was written.
+    pub fn program(&self, address: u32, data: &[u8], verify: bool) -> Result<()> {
+        self.flash.program(address, data, verify)
+    }
+
+    /// Erase entire flash chip
+    pub fn erase(&self) -> Result<()> {
+        self.flash.erase()
+    }
+
+    /// Reset the attached flash
+    pub fn reset(&self) -> Result<()> {
+        self.flash.reset()
+    }
+
+    /// Power down the attached flash
+    pub fn power_down(&self) -> Result<()> {
+        self.flash.power_down()
+    }
+
+    /// Power up the attached flash
+    pub fn power_up(&self) -> Result<()> {
+        self.flash.power_up()
+    }
+}
+
+/// Abstract SPI flash manager.
+pub struct Flash<A: FlashAccess> {
+    access: A,
+}
+
+impl<A: FlashAccess> Flash<A> {
+    pub fn new(access: A) -> Self {
+        Self { access }
+    }
+
+    /// Read the attached flash device, manufacturer, and unique IDs
+    pub fn read_id(&self) -> Result<FlashID> {
         self.power_up()?;
         self.reset()?;
         let (manufacturer_id, device_id) = self.read_device_id()?;
@@ -227,10 +302,10 @@ impl<'a> Flash<'a> {
         let mut tx = vec![command as u8];
         tx.extend(data);
         tx.extend(vec![0u8; nbytes]);
-        self.programmer.flash_mode()?;
-        self.programmer.select()?;
-        let rx = self.programmer.write(&tx)?;
-        self.programmer.unselect()?;
+        self.access.enable()?;
+        self.access.select()?;
+        let rx = self.access.write(&tx)?;
+        self.access.unselect()?;
         Ok(rx[1+data.len()..].to_vec())
     }
 
