@@ -17,3 +17,6 @@ codegen-units = 1
 incremental = false
 debug = true
 lto = true
+
+[features]
+inline-asm = []

@@ -50,19 +50,16 @@ impl<'a> GPIO {
     }
 
     pub fn set_high(&'a self, n: u8) -> &Self {
-        assert!(n < 16);
         write_reg!(gpio, self.p, BSRR, 1 << n);
         self
     }
 
     pub fn set_low(&'a self, n: u8) -> &Self {
-        assert!(n < 16);
         write_reg!(gpio, self.p, BRR, 1 << n);
         self
     }
 
     pub fn toggle(&'a self, n: u8) -> &Self {
-        assert!(n < 16);
         let pin = (read_reg!(gpio, self.p, IDR) >> n) & 1;
         if pin == 1 {
             self.set_low(n)
@@ -72,7 +69,6 @@ impl<'a> GPIO {
     }
 
     pub fn set_mode(&'a self, n: u8, mode: u32) -> &Self {
-        assert!(n < 16);
         let offset = n * 2;
         let mask = 0b11 << offset;
         let val = (mode << offset) & mask;
@@ -126,7 +122,6 @@ impl<'a> GPIO {
     }
 
     pub fn set_otype(&'a self, n: u8, otype: u32) -> &Self {
-        assert!(n < 16);
         let offset = n;
         let mask = 0b1 << offset;
         let val = (otype << offset) & mask;
@@ -143,7 +138,6 @@ impl<'a> GPIO {
     }
 
     pub fn set_ospeed(&'a self, n: u8, ospeed: u32) -> &Self {
-        assert!(n < 16);
         let offset = n * 2;
         let mask = 0b11 << offset;
         let val = (ospeed << offset) & mask;
@@ -168,7 +162,6 @@ impl<'a> GPIO {
     }
 
     pub fn set_af(&'a self, n: u8, af: u32) -> &Self {
-        assert!(n < 16);
         if n < 8 {
             let offset = n * 4;
             let mask = 0b1111 << offset;

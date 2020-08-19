@@ -119,6 +119,7 @@ impl<'a> JTAG<'a> {
     ///
     /// Writes `n` bits from successive bytes of `tdi`, LSbit first.
     /// Captures `n` bits from TDO and writes into successive bytes of `tdo`, LSbit first.
+    #[cfg(not(feature="inline-asm"))]
     fn transfer_rw(&self, n: usize, tdi: &[u8], tdo: &mut [u8]) {
         for (byte_idx, (tdi, tdo)) in tdi.iter().zip(tdo.iter_mut()).enumerate() {
             for bit_idx in 0..8 {
@@ -132,6 +133,85 @@ impl<'a> JTAG<'a> {
                 *tdo |= (self.pins.tdo.get_state() as u8) << bit_idx;
                 self.pins.tck.set_high();
                 self.pins.tck.set_low();
+            }
+        }
+    }
+
+    /// Read-write JTAG transfer, with TDO capture.
+    ///
+    /// Writes `n` bits from successive bytes of `tdi`, LSbit first.
+    /// Captures `n` bits from TDO and writes into successive bytes of `tdo`, LSbit first.
+    ///
+    /// This version of the method is only available when the `inline-asm` feature is
+    /// enabled and is written in optimised assembly which requires the default pinout
+    /// is used: JTCK=PA5, JTDO=PA3, JTDI=PA4.
+    #[cfg(feature="inline-asm")]
+    fn transfer_rw(&self, n: usize, tdi: &[u8], tdo: &mut [u8]) {
+        // "Use" TDO pin
+        self.pins.tdo;
+
+        // Assembly constants
+        const GPIOA: u32 = 0x4800_0000;
+        const TCK_PIN: u32 = 1 << 5;
+        const TDI_PIN: u32 = 1 << 4;
+        const TDO_PIN: u32 = 1 << 3;
+
+        for (byte_idx, (tdi, tdo)) in tdi.iter().zip(tdo.iter_mut()).enumerate() {
+            for bit_idx in 0..8 {
+                // Stop after transmitting `n` bits.
+                if byte_idx*8 + bit_idx == n {
+                    return;
+                }
+
+                let mut _tmp1: u32;
+                let mut _tmp2: u32;
+
+                unsafe { llvm_asm!("
+                    @ $0: tmp1, $1: tmp2
+                    @ $2: *tdo, $3: tdi, $4: bit_idx,
+                    @ $5: GPIOA, $6 JTDO, $7: JTDI, $8: JTCK
+
+                    @ Test TDI against 1<<bit_idx
+                    movs $0, #1
+                    lsls $0, $4
+                    tst $3, $0
+                    beq 1f
+
+                    @ Set TDI high, or...
+                    movs $0, $7
+                    str $0, [$5, #0x18]
+                    b 2f
+
+                    @ Set TDI low
+                    1:
+                    movs $0, $7
+                    str $0, [$5, #0x28]
+
+                    @ Read TDO
+                    2:
+                    ldr $0, [$5, #0x10]
+                    movs $1, $6
+                    tst $0, $1
+                    beq 3f
+                    movs $0, #1
+                    lsls $0, $4
+                    ldrb $1, [$2]
+                    orrs $1, $0
+                    strb $1, [$2]
+
+                    @ Toggle TCK high then low
+                    3:
+                    movs $0, $8
+                    str $0, [$5, #0x18]
+                    nop
+                    str $0, [$5, #0x28]
+                "
+                : "=&r"(_tmp1), "=&r"(_tmp2)
+                : "r"(tdo as *mut u8), "r"(*tdi), "r"(bit_idx), "r"(GPIOA),
+                  "i"(TDO_PIN), "i"(TDI_PIN), "i"(TCK_PIN)
+                : "memory", "cpsr"
+                : "volatile"
+                )};
             }
         }
     }

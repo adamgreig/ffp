@@ -78,7 +78,7 @@ dependencies = [
  "cortex-m 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "cortex-m-rt 0.6.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "git-version 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
- "num_enum 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num_enum 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "panic-halt 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "stm32ral 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -121,16 +121,16 @@ dependencies = [
 
 [[package]]
 name = "num_enum"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "derivative 2.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "num_enum_derive 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "num_enum_derive 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "num_enum_derive"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.19 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -251,8 +251,8 @@ dependencies = [
 "checksum generic-array 0.13.2 (registry+https://github.com/rust-lang/crates.io-index)" = "0ed1e761351b56f54eb9dcd0cfaca9fd0daecf93918e1cfc01c8a3d26ee7adcd"
 "checksum git-version 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "94918e83f1e01dedc2e361d00ce9487b14c58c7f40bab148026fa39d42cb41e2"
 "checksum git-version-macro 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "34a97a52fdee1870a34fa6e4b77570cba531b27d1838874fef4429a791a3d657"
-"checksum num_enum 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "5f1e2d7c9c4282839fc56f549bc006a54e6f28a851a7de7adcf3f50575751760"
-"checksum num_enum_derive 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4a9f19dafa80d8af21ede328f2c4ed836604a2eb1c309d688f89a7cc40568923"
+"checksum num_enum 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "226b45a5c2ac4dd696ed30fa6b94b057ad909c7b7fc2e0d0808192bced894066"
+"checksum num_enum_derive 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)" = "1c0fd9eba1d5db0994a239e09c1be402d35622277e35468ba891aa5e3188ce7e"
 "checksum panic-halt 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "de96540e0ebde571dc55c73d60ef407c653844e6f9a1e2fdbd40c07b9252d812"
 "checksum proc-macro-hack 0.5.18 (registry+https://github.com/rust-lang/crates.io-index)" = "99c605b9a0adc77b7211c6b1f722dcb613d68d66859a44f3d485a6da332b0598"
 "checksum proc-macro2 1.0.19 (registry+https://github.com/rust-lang/crates.io-index)" = "04f5f085b5d71e2188cb8271e5da0161ad52c3f227a661a3c135fdf28e258b12"
