@@ -108,7 +108,40 @@ fn main() -> ffp::Result<()> {
             .subcommand(SubCommand::with_name("reset")
                         .about("Pulse the JTAG nRST line"))
             .subcommand(SubCommand::with_name("status")
-                        .about("Read ECP5 status register")))
+                        .about("Read ECP5 status register"))
+            .subcommand(SubCommand::with_name("flash")
+                .about("Access SPI flash attached to ECP5")
+                .setting(AppSettings::SubcommandRequiredElseHelp)
+                .subcommand(SubCommand::with_name("id")
+                            .about("Read flash ID"))
+                .subcommand(SubCommand::with_name("erase")
+                            .about("Completely erase flash"))
+                .subcommand(SubCommand::with_name("program")
+                            .about("Program flash with binary data from file")
+                            .arg(Arg::with_name("file")
+                                 .help("File to write to flash")
+                                 .required(true))
+                            .arg(Arg::with_name("offset")
+                                 .help("Start address (in bytes) to read from")
+                                 .long("offset")
+                                 .default_value("0"))
+                            .arg(Arg::with_name("no-verify")
+                                 .help("Disable automatic readback verification")
+                                 .short("n")
+                                 .long("no-verify")))
+                .subcommand(SubCommand::with_name("read")
+                            .about("Read contents of flash to file")
+                            .arg(Arg::with_name("file")
+                                 .help("File to write with contents of flash")
+                                 .required(true))
+                            .arg(Arg::with_name("length")
+                                 .help("Length (in bytes) to read from flash")
+                                 .long("length")
+                                 .default_value("8388608"))
+                            .arg(Arg::with_name("offset")
+                                 .help("Start address (in bytes) to read from")
+                                 .long("offset")
+                                 .default_value("0")))))
         .subcommand(SubCommand::with_name("bootload")
             .about("Reset FFP hardware into USB bootloader"))
         .subcommand(SubCommand::with_name("devices")
@@ -243,7 +276,7 @@ fn main() -> ffp::Result<()> {
         Some("ecp5") => {
             let matches = matches.subcommand_matches("ecp5").unwrap();
             let idx = value_t!(matches.value_of("scan-index"), usize).unwrap();
-            let ecp5 = ECP5::new(&programmer, idx);
+            let ecp5 = ECP5::new(&programmer, idx)?;
             match matches.subcommand_name() {
                 Some("scan") => {
                     let (idcode, idx) = ECP5::scan(&programmer)?;
@@ -257,6 +290,43 @@ fn main() -> ffp::Result<()> {
                 Some("status") => {
                     let status = ecp5.status()?;
                     println!("{:?}", status);
+                },
+                Some("flash") => {
+                    let flash = ecp5.get_flash()?;
+                    let id = flash.read_id().expect("Error reading flash ID");
+                    if !quiet { println!("Flash ID: {}", id) };
+                    let matches = matches.subcommand_matches("flash").unwrap();
+                    match matches.subcommand_name() {
+                        Some("id") => {
+                            if quiet { println!("Flash ID: {}", id) };
+                        },
+                        Some("erase") => {
+                            if !quiet { println!("Erasing flash") };
+                            flash.erase()?;
+                        },
+                        Some("program") => {
+                            if !quiet { println!("Programming flash") };
+                            let matches = matches.subcommand_matches("program").unwrap();
+                            let path = matches.value_of("file").unwrap();
+                            let offset = value_t!(matches.value_of("offset"), u32).unwrap();
+                            let verify = !matches.is_present("no-verify");
+                            let mut file = File::open(path)?;
+                            let mut data = Vec::new();
+                            file.read_to_end(&mut data)?;
+                            flash.program(offset, &data, verify)?;
+                        },
+                        Some("read") => {
+                            if !quiet { println!("Reading flash to file") };
+                            let matches = matches.subcommand_matches("read").unwrap();
+                            let path = matches.value_of("file").unwrap();
+                            let offset = value_t!(matches.value_of("offset"), u32).unwrap();
+                            let length = value_t!(matches.value_of("length"), usize).unwrap();
+                            let mut file = File::create(path)?;
+                            let data = flash.read(offset, length)?;
+                            file.write_all(&data)?;
+                        },
+                        _ => panic!(),
+                    }
                 },
                 _ => panic!(),
             }

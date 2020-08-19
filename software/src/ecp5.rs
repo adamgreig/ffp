@@ -3,7 +3,8 @@ use num_enum::{FromPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::fmt;
 use crate::{Programmer, JTAG, Flash, FFPError, Result};
-use crate::jtag::SequenceBuilder;
+use crate::jtag::{SequenceBuilder, TAP};
+use crate::flash::FlashAccess;
 
 #[repr(u32)]
 #[derive(Eq, PartialEq, TryFromPrimitive)]
@@ -262,7 +263,7 @@ impl fmt::Debug for Status {
 /// ECP5 FPGA manager
 pub struct ECP5<'a> {
     programmer: &'a Programmer,
-    idx: usize,
+    tap: TAP<'a>,
 }
 
 impl<'a> ECP5<'a> {
@@ -282,8 +283,8 @@ impl<'a> ECP5<'a> {
     }
 
     /// Create a new ECP5 instance from a Programmer and a scan chain index.
-    pub fn new(programmer: &'a Programmer, idx: usize) -> Self {
-        Self { programmer, idx }
+    pub fn new(programmer: &'a Programmer, idx: usize) -> Result<Self> {
+        Ok(Self { programmer, tap: TAP::new(programmer, idx)? })
     }
 
     /// Reset the attached ECP5.
@@ -307,21 +308,65 @@ impl<'a> ECP5<'a> {
 
     /// Read ECP5 status word
     pub fn status(&self) -> Result<Status> {
-        self.programmer.jtag_mode()?;
-        let request = SequenceBuilder::new()
-            .test_logic_reset()
-            .mode(1, 0)         // Run-Test/Idle
-            .mode(2, 1)         // Select-DR-Scan, Select-IR-Scan
-            .mode(2, 0)         // Capture-IR, Shift-IR
-            //.write(7, 0, &[(Command::LSC_READ_STATUS as u8) & 0x7F])
-            //.write(3, 1, &[(Command::LSC_READ_STATUS as u8) >> 7])
-            .write(7, 0, &[0b0111100])
-            .write(3, 1, &[0b0])
-            .mode(2, 0)         // Capture-DR, Shift-DR
-            .read(32, 0)
-            .test_logic_reset();
-        let data = request.execute(self.programmer)?;
+        self.tap.write_ir(&[Command::LSC_READ_STATUS as u8], 8)?;
+        let data = self.tap.read_dr(32)?;
         let status = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
         Ok(Status::new(status))
+    }
+
+    pub fn get_flash(self) -> Result<Flash<ECP5<'a>>> {
+        self.command(Command::ISC_ENABLE)?;
+        self.tap.run_test_idle(50)?;
+        self.command(Command::ISC_ERASE)?;
+        self.tap.run_test_idle(50)?;
+        self.command(Command::ISC_DISABLE)?;
+        self.tap.run_test_idle(50)?;
+        self.command(Command::LSC_BACKGROUND_SPI)?;
+        self.tap.write_dr(&[0xFE, 0x68], 16)?;
+        self.tap.run_test_idle(50)?;
+        Ok(Flash::new(self))
+    }
+
+    fn command(&self, command: Command) -> Result<()> {
+        self.tap.write_ir(&[command as u8], 8)
+    }
+}
+
+impl<'a> FlashAccess for ECP5<'a> {
+    fn enable(&self) -> Result<()> {
+        Ok(())
+    }
+
+    fn select(&self) -> Result<()> {
+        SequenceBuilder::new()
+            .mode(1, 1)         // Select-DR-Scan
+            .mode(2, 0)         // Capture-DR, Shift-DR
+            .execute(self.programmer)?;
+        Ok(())
+    }
+
+    fn unselect(&self) -> Result<()> {
+        SequenceBuilder::new()
+            .mode(1, 1)         // Exit1-DR
+            .mode(1, 0)         // Pause-DR
+            .mode(2, 1)         // Exit2-DR, Update-DR
+            .mode(1, 0)         // Run-Test/Idle
+            .execute(self.programmer)?;
+        Ok(())
+    }
+
+    fn write(&self, data: &[u8]) -> Result<Vec<u8>> {
+        let mut result = Vec::new();
+        for group in data.chunks(56) {
+            let mut seq = SequenceBuilder::new();
+            for chunk in group.chunks(8) {
+                let tdi: Vec<u8> = chunk.iter().map(|x| x.reverse_bits()).collect();
+                seq = seq.request(tdi.len() * 8, 0, Some(&tdi), true)
+            }
+            let tdo = seq.execute(self.programmer)?;
+            let tdo: Vec<u8> = tdo.iter().map(|x| x.reverse_bits()).collect();
+            result.extend_from_slice(&tdo);
+        }
+        Ok(result)
     }
 }

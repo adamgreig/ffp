@@ -103,21 +103,6 @@ impl<'a> SPIFlash<'a> {
     pub fn erase(&self) -> Result<()> {
         self.flash.erase()
     }
-
-    /// Reset the attached flash
-    pub fn reset(&self) -> Result<()> {
-        self.flash.reset()
-    }
-
-    /// Power down the attached flash
-    pub fn power_down(&self) -> Result<()> {
-        self.flash.power_down()
-    }
-
-    /// Power up the attached flash
-    pub fn power_up(&self) -> Result<()> {
-        self.flash.power_up()
-    }
 }
 
 /// Abstract SPI flash manager.

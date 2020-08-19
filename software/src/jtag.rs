@@ -77,6 +77,83 @@ impl<'a> JTAG<'a> {
     }
 }
 
+#[allow(unused)]
+pub enum TAPState {
+    TestLogicReset,
+    RunTestIdle,
+    SelectDRScan,
+    CaptureDR,
+    ShiftDR,
+    Exit1DR,
+    PauseDR,
+    Exit2DR,
+    UpdateDR,
+    SelectIRScan,
+    CaptureIR,
+    ShiftIR,
+    Exit1IR,
+    PauseIR,
+    Exit2IR,
+    UpdateIR,
+}
+
+pub struct TAP<'a> {
+    programmer: &'a Programmer,
+    state: TAPState,
+    idx: usize,
+}
+
+impl<'a> TAP<'a> {
+    pub fn new(programmer: &'a Programmer, idx: usize) -> Result<Self> {
+        programmer.jtag_mode()?;
+        SequenceBuilder::new().mode(5, 1).mode(1, 0).execute(programmer)?;
+        Ok(Self { programmer, state: TAPState::RunTestIdle, idx })
+    }
+
+    pub fn write_ir(&self, data: &[u8], nbits: usize) -> Result<()> {
+        assert!(data.len() * 8 >= nbits);
+        SequenceBuilder::new()
+            .mode(2, 1)     // Select-DR-Scan, Select-IR-Scan
+            .mode(2, 0)     // Capture-IR, Shift-IR
+            .write(nbits - 1, 0, data)
+            .write(1, 1, &[data.last().unwrap() >> 7])
+            .mode(1, 1)     // Update-IR
+            .mode(1, 0)     // Run-Test/Idle
+            .execute(self.programmer)?;
+        Ok(())
+    }
+
+    pub fn read_dr(&self, nbits: usize) -> Result<Vec<u8>> {
+        SequenceBuilder::new()
+            .mode(1, 1)     // Select-DR-Scan
+            .mode(2, 0)     // Capture-DR, Shift-DR
+            .read(nbits, 0)
+            .mode(2, 1)     // Exit1-DR, Update-DR
+            .mode(1, 0)     // Run-Test/Idle
+            .execute(self.programmer)
+    }
+
+    pub fn write_dr(&self, data: &[u8], nbits: usize) -> Result<()> {
+        assert!(data.len() * 8 >= nbits);
+        SequenceBuilder::new()
+            .mode(1, 1)     // Select-DR-Scan
+            .mode(2, 0)     // Capture-DR, Shift-DR
+            .write(nbits - 1, 0, data)
+            .write(1, 1, &[data.last().unwrap() >> 7])
+            .mode(1, 1)     // Update-DR
+            .mode(1, 0)     // Run-Test/Idle
+            .execute(self.programmer)?;
+        Ok(())
+    }
+
+    pub fn run_test_idle(&self, n: usize) -> Result<()> {
+        SequenceBuilder::new()
+            .mode(n, 0)     // Select-DR-Scan
+            .execute(self.programmer)?;
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct SequenceBuilder {
     num_sequences: usize,
@@ -133,10 +210,6 @@ impl SequenceBuilder {
 
     pub fn read(self, len: usize, tms: u8) -> Self {
         self.request(len, tms, None, true)
-    }
-
-    pub fn test_logic_reset(self) -> Self {
-        self.mode(5, 1)
     }
 
     fn to_bytes(self) -> Vec<u8> {
