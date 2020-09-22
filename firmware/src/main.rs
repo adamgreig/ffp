@@ -4,8 +4,6 @@
 #![no_std]
 #![no_main]
 
-#![cfg_attr(feature="inline-asm", feature(llvm_asm))]
-
 extern crate panic_halt;
 use cortex_m_rt::{entry, pre_init};
 use git_version::git_version;

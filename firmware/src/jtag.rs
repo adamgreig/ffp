@@ -1,6 +1,7 @@
 // Copyright 2020 Adam Greig
 // Dual licensed under the Apache 2.0 and MIT licenses.
 
+use stm32ral::{read_reg, write_reg, gpio};
 use crate::hal::gpio::{Pin, Pins};
 
 struct JTAGPins<'a> {
@@ -12,14 +13,20 @@ struct JTAGPins<'a> {
 
 pub struct JTAG<'a> {
     pins: JTAGPins<'a>,
+    pins_same_port: bool,
 }
 
 impl<'a> JTAG<'a> {
     /// Create a new JTAG object from the provided Pins struct.
     pub fn new(pins: &'a Pins) -> Self {
+        // If JTCK and JTDI and JTDO are on the same port, we can use a faster transfer method.
+        let pins_same_port =
+            (pins.sck.instance() as *const _ == pins.cs.instance() as *const _) &&
+            (pins.sck.instance() as *const _ == pins.fpga_rst.instance() as *const _);
+
         JTAG { pins: JTAGPins {
             tms: &pins.flash_si, tck: &pins.sck, tdo: &pins.cs, tdi: &pins.fpga_rst
-        } }
+        }, pins_same_port }
     }
 
     /// Handle a sequence request. The request data follows the CMSIS-DAP
@@ -100,6 +107,10 @@ impl<'a> JTAG<'a> {
     ///
     /// Writes `n` bits from successive bytes of `tdi`, LSbit first.
     fn transfer_wo(&self, n: usize, tdi: &[u8]) {
+        if self.pins_same_port {
+            return self.transfer_wo_fast(n, tdi);
+        }
+
         for (byte_idx, byte) in tdi.iter().enumerate() {
             for bit_idx in 0..8 {
                 // Stop after transmitting `n` bits.
@@ -115,12 +126,45 @@ impl<'a> JTAG<'a> {
         }
     }
 
+    /// Write-only JTAG transfer without capturing TDO.
+    ///
+    /// This faster version requires that JTCK and JTDI are on the same GPIO port.
+    fn transfer_wo_fast(&self, n: usize, tdi: &[u8]) {
+        // Store all the relevant pins and ports for faster access
+        let port = self.pins.tdi.instance();
+        let tdi_pin = 1 << self.pins.tdi.pin_n();
+        let tck_pin = 1 << self.pins.tck.pin_n();
+
+        for (byte_idx, byte) in tdi.iter().enumerate() {
+            for bit_idx in 0..8 {
+                // Stop after transmitting `n` bits.
+                if byte_idx*8 + bit_idx == n {
+                    return;
+                }
+
+                // Set JTDI pin
+                if byte & (1 << bit_idx) == 0 {
+                    write_reg!(gpio, port, BRR, tdi_pin);
+                } else {
+                    write_reg!(gpio, port, BSRR, tdi_pin);
+                }
+
+                // Toggle JTCK pin
+                write_reg!(gpio, port, BSRR, tck_pin);
+                write_reg!(gpio, port, BRR, tck_pin);
+            }
+        }
+    }
+
     /// Read-write JTAG transfer, with TDO capture.
     ///
     /// Writes `n` bits from successive bytes of `tdi`, LSbit first.
     /// Captures `n` bits from TDO and writes into successive bytes of `tdo`, LSbit first.
-    #[cfg(not(feature="inline-asm"))]
     fn transfer_rw(&self, n: usize, tdi: &[u8], tdo: &mut [u8]) {
+        if self.pins_same_port {
+            return self.transfer_rw_fast(n, tdi, tdo);
+        }
+
         for (byte_idx, (tdi, tdo)) in tdi.iter().zip(tdo.iter_mut()).enumerate() {
             for bit_idx in 0..8 {
                 // Stop after transmitting `n` bits.
@@ -130,7 +174,9 @@ impl<'a> JTAG<'a> {
 
                 // Set TDI, read TDO, and toggle TCK.
                 self.pins.tdi.set_bool(tdi & (1 << bit_idx) != 0);
-                *tdo |= (self.pins.tdo.get_state() as u8) << bit_idx;
+                if self.pins.tdo.is_high() {
+                    *tdo |= 1 << bit_idx;
+                }
                 self.pins.tck.set_high();
                 self.pins.tck.set_low();
             }
@@ -139,22 +185,13 @@ impl<'a> JTAG<'a> {
 
     /// Read-write JTAG transfer, with TDO capture.
     ///
-    /// Writes `n` bits from successive bytes of `tdi`, LSbit first.
-    /// Captures `n` bits from TDO and writes into successive bytes of `tdo`, LSbit first.
-    ///
-    /// This version of the method is only available when the `inline-asm` feature is
-    /// enabled and is written in optimised assembly which requires the default pinout
-    /// is used: JTCK=PA5, JTDO=PA3, JTDI=PA4.
-    #[cfg(feature="inline-asm")]
-    fn transfer_rw(&self, n: usize, tdi: &[u8], tdo: &mut [u8]) {
-        // "Use" TDO pin
-        self.pins.tdo;
-
-        // Assembly constants
-        const GPIOA: u32 = 0x4800_0000;
-        const TCK_PIN: u32 = 1 << 5;
-        const TDI_PIN: u32 = 1 << 4;
-        const TDO_PIN: u32 = 1 << 3;
+    /// This faster version requires JTCK, JTDI, and JTDO are all on the same GPIO port.
+    fn transfer_rw_fast(&self, n: usize, tdi: &[u8], tdo: &mut [u8]) {
+        // Store all the relevant pins and ports for faster access
+        let port = self.pins.tdi.instance();
+        let tdi_pin = 1 << self.pins.tdi.pin_n();
+        let tdo_pin = 1 << self.pins.tdo.pin_n();
+        let tck_pin = 1 << self.pins.tck.pin_n();
 
         for (byte_idx, (tdi, tdo)) in tdi.iter().zip(tdo.iter_mut()).enumerate() {
             for bit_idx in 0..8 {
@@ -163,55 +200,21 @@ impl<'a> JTAG<'a> {
                     return;
                 }
 
-                let mut _tmp1: u32;
-                let mut _tmp2: u32;
+                // Set JTDI pin
+                if tdi & (1 << bit_idx) == 0 {
+                    write_reg!(gpio, port, BRR, tdi_pin);
+                } else {
+                    write_reg!(gpio, port, BSRR, tdi_pin);
+                }
 
-                unsafe { llvm_asm!("
-                    @ $0: tmp1, $1: tmp2
-                    @ $2: *tdo, $3: tdi, $4: bit_idx,
-                    @ $5: GPIOA, $6 JTDO, $7: JTDI, $8: JTCK
+                // Read JTDO pin
+                if read_reg!(gpio, port, IDR) & tdo_pin != 0 {
+                    *tdo |= 1 << bit_idx;
+                }
 
-                    @ Test TDI against 1<<bit_idx
-                    movs $0, #1
-                    lsls $0, $4
-                    tst $3, $0
-                    beq 1f
-
-                    @ Set TDI high, or...
-                    movs $0, $7
-                    str $0, [$5, #0x18]
-                    b 2f
-
-                    @ Set TDI low
-                    1:
-                    movs $0, $7
-                    str $0, [$5, #0x28]
-
-                    @ Read TDO
-                    2:
-                    ldr $0, [$5, #0x10]
-                    movs $1, $6
-                    tst $0, $1
-                    beq 3f
-                    movs $0, #1
-                    lsls $0, $4
-                    ldrb $1, [$2]
-                    orrs $1, $0
-                    strb $1, [$2]
-
-                    @ Toggle TCK high then low
-                    3:
-                    movs $0, $8
-                    str $0, [$5, #0x18]
-                    nop
-                    str $0, [$5, #0x28]
-                "
-                : "=&r"(_tmp1), "=&r"(_tmp2)
-                : "r"(tdo as *mut u8), "r"(*tdi), "r"(bit_idx), "r"(GPIOA),
-                  "i"(TDO_PIN), "i"(TDI_PIN), "i"(TCK_PIN)
-                : "memory", "cpsr"
-                : "volatile"
-                )};
+                // Toggle JTCK pin
+                write_reg!(gpio, port, BSRR, tck_pin);
+                write_reg!(gpio, port, BRR, tck_pin);
             }
         }
     }

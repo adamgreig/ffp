@@ -37,6 +37,9 @@ pub enum FFPError {
 
     #[fail(display="No ECP5 device found.")]
     ECP5NotFound,
+
+    #[fail(display="ECP5 configuration failed.")]
+    ECP5ConfigurationFailed,
 }
 
 impl From<rusb::Error> for FFPError {

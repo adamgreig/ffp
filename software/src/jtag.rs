@@ -99,7 +99,6 @@ pub enum TAPState {
 
 pub struct TAP<'a> {
     programmer: &'a Programmer,
-    state: TAPState,
     idx: usize,
 }
 
@@ -107,7 +106,7 @@ impl<'a> TAP<'a> {
     pub fn new(programmer: &'a Programmer, idx: usize) -> Result<Self> {
         programmer.jtag_mode()?;
         SequenceBuilder::new().mode(5, 1).mode(1, 0).execute(programmer)?;
-        Ok(Self { programmer, state: TAPState::RunTestIdle, idx })
+        Ok(Self { programmer, idx })
     }
 
     pub fn write_ir(&self, data: &[u8], nbits: usize) -> Result<()> {
@@ -151,6 +150,10 @@ impl<'a> TAP<'a> {
             .mode(n, 0)     // Select-DR-Scan
             .execute(self.programmer)?;
         Ok(())
+    }
+
+    pub fn idx(&self) -> usize {
+        self.idx
     }
 }
 

@@ -11,7 +11,9 @@ pub struct GPIO {
 
 pub struct Pin<'a> {
     n: u8,
+    mask: u32,
     port: &'a GPIO,
+    instance: &'a gpio::Instance,
 }
 
 pub struct Pins<'a> {
@@ -46,7 +48,11 @@ impl<'a> GPIO {
 
     pub fn pin(&'a self, n: u8) -> Pin<'a> {
         assert!(n < 16);
-        Pin { n, port: self }
+        Pin { n, mask: 1 << n, port: self, instance: &self.p }
+    }
+
+    pub fn instance(&self) -> &gpio::Instance {
+        &self.p
     }
 
     pub fn set_high(&'a self, n: u8) -> &Self {
@@ -206,13 +212,21 @@ impl<'a> GPIO {
 }
 
 impl<'a> Pin<'a> {
+    pub fn pin_n(&self) -> u8 {
+        self.n
+    }
+
+    pub fn instance(&self) -> &gpio::Instance {
+        self.instance
+    }
+
     pub fn set_high(&self) -> &Self {
-        self.port.set_high(self.n);
+        write_reg!(gpio, self.instance, BSRR, self.mask);
         self
     }
 
     pub fn set_low(&self) -> &Self {
-        self.port.set_low(self.n);
+        write_reg!(gpio, self.instance, BRR, self.mask);
         self
     }
 
@@ -232,10 +246,9 @@ impl<'a> Pin<'a> {
     }
 
     pub fn get_state(&self) -> PinState {
-        match self.port.get_pin_idr(self.n) {
+        match (read_reg!(gpio, self.instance, IDR) & self.mask) {
             0 => PinState::Low,
-            1 => PinState::High,
-            _ => unreachable!(),
+            _ => PinState::High,
         }
     }
 

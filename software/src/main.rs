@@ -109,6 +109,11 @@ fn main() -> ffp::Result<()> {
                         .about("Pulse the JTAG nRST line"))
             .subcommand(SubCommand::with_name("status")
                         .about("Read ECP5 status register"))
+            .subcommand(SubCommand::with_name("program")
+                        .about("Program FPGA with bitstream")
+                        .arg(Arg::with_name("file")
+                             .help("File to program to FPGA")
+                             .required(true)))
             .subcommand(SubCommand::with_name("flash")
                 .about("Access SPI flash attached to ECP5")
                 .setting(AppSettings::SubcommandRequiredElseHelp)
@@ -277,6 +282,8 @@ fn main() -> ffp::Result<()> {
             let matches = matches.subcommand_matches("ecp5").unwrap();
             let idx = value_t!(matches.value_of("scan-index"), usize).unwrap();
             let ecp5 = ECP5::new(&programmer, idx)?;
+            let idcode = ecp5.id()?;
+            if !quiet { println!("Found {}", idcode.name()) }
             match matches.subcommand_name() {
                 Some("scan") => {
                     let (idcode, idx) = ECP5::scan(&programmer)?;
@@ -290,6 +297,15 @@ fn main() -> ffp::Result<()> {
                 Some("status") => {
                     let status = ecp5.status()?;
                     println!("{:?}", status);
+                },
+                Some("program") => {
+                    if !quiet { println!("Programming ECP5") };
+                    let matches = matches.subcommand_matches("program").unwrap();
+                    let path = matches.value_of("file").unwrap();
+                    let mut file = File::open(path)?;
+                    let mut data = Vec::new();
+                    file.read_to_end(&mut data)?;
+                    ecp5.program(&data)?;
                 },
                 Some("flash") => {
                     let flash = ecp5.get_flash()?;

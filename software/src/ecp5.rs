@@ -1,7 +1,5 @@
-use failure::ResultExt;
 use num_enum::{FromPrimitive, TryFromPrimitive};
-use std::convert::TryFrom;
-use std::fmt;
+use std::{fmt, convert::TryFrom};
 use crate::{Programmer, JTAG, Flash, FFPError, Result};
 use crate::jtag::{SequenceBuilder, TAP};
 use crate::flash::FlashAccess;
@@ -70,7 +68,7 @@ pub enum Command {
     LSC_VERIFY_INCR_RTI = 0x6A,
     LSC_PROG_CTRL0 = 0x22,
     LSC_READ_CTRL0 = 0x20,
-    LSB_RESET_CRC = 0x3B,
+    LSC_RESET_CRC = 0x3B,
     LSC_READ_CRC = 0x60,
     LSC_PROG_SED_CRC = 0xA2,
     LSC_READ_SED_CRC = 0xA4,
@@ -294,15 +292,16 @@ impl<'a> ECP5<'a> {
     }
 
     /// Find an ECP5 on the scan chain and print its ID
-    pub fn id(&self) -> Result<(ECP5IDCODE, usize)> {
+    pub fn id(&self) -> Result<ECP5IDCODE> {
         let jtag = JTAG::new(&self.programmer);
         let idcodes = jtag.idcodes()?;
 
-        for (idx, idcode) in idcodes.iter().enumerate() {
+        if let Some(idcode) = idcodes.get(self.tap.idx()) {
             if let Some(ecp5) = ECP5IDCODE::from_idcode(*idcode) {
-                return Ok((ecp5, idx));
+                return Ok(ecp5);
             }
         }
+
         Err(FFPError::ECP5NotFound)?
     }
 
@@ -314,17 +313,68 @@ impl<'a> ECP5<'a> {
         Ok(Status::new(status))
     }
 
+    /// Swap to SPI flash access mode.
+    ///
+    /// This clears the current configuration SRAM content.
     pub fn get_flash(self) -> Result<Flash<ECP5<'a>>> {
         self.command(Command::ISC_ENABLE)?;
         self.tap.run_test_idle(50)?;
         self.command(Command::ISC_ERASE)?;
         self.tap.run_test_idle(50)?;
+        std::thread::sleep(std::time::Duration::from_millis(100));
         self.command(Command::ISC_DISABLE)?;
         self.tap.run_test_idle(50)?;
         self.command(Command::LSC_BACKGROUND_SPI)?;
         self.tap.write_dr(&[0xFE, 0x68], 16)?;
         self.tap.run_test_idle(50)?;
         Ok(Flash::new(self))
+    }
+
+    /// Program the ECP5 configuration SRAM.
+    ///
+    /// The ECP5 will be reset and start configuration after programming completion.
+    pub fn program(&self, data: &[u8]) -> Result<()> {
+        self.status()?;
+
+        // Enable configuration
+        self.command(Command::ISC_ENABLE)?;
+        self.tap.run_test_idle(50)?;
+
+        let status = self.status()?;
+        println!("Cfg starting, {:?}", status);
+
+        self.command(Command::LSC_BITSTREAM_BURST)?;
+
+        // Enter Shift-DR
+        SequenceBuilder::new()
+            .mode(1, 1)
+            .mode(2, 0)
+            .execute(self.programmer)?;
+
+        // Load in entire bitstream
+        for group in data.chunks(56) {
+            let mut seq = SequenceBuilder::new();
+            for chunk in group.chunks(8) {
+                let tdi: Vec<u8> = chunk.iter().map(|x| x.reverse_bits()).collect();
+                seq = seq.write(tdi.len() * 8, 0, &tdi);
+            }
+            seq.execute(self.programmer)?;
+        }
+
+        // Return to Run-Test/Idle
+        SequenceBuilder::new()
+            .mode(2, 1)
+            .mode(1, 0)
+            .execute(self.programmer)?;
+
+        // Disable configuration
+        self.command(Command::ISC_DISABLE)?;
+        self.tap.run_test_idle(50)?;
+
+        let status = self.status()?;
+        println!("Cfg done, {:?}", status);
+
+        Ok(())
     }
 
     fn command(&self, command: Command) -> Result<()> {
