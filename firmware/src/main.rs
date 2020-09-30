@@ -73,7 +73,7 @@ fn main() -> ! {
 
     let swd = swd::SWD::new(&spi, &pins);
     let jtag = jtag::JTAG::new(&pins);
-    let mut dap = dap::DAP::new(swd, &mut uart, &pins);
+    let mut dap = dap::DAP::new(swd, &jtag, &mut uart, &pins);
 
     // Create App instance with the HAL instances
     let mut app = app::App::new(

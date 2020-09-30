@@ -5,7 +5,7 @@
 
 use core::convert::{TryFrom, TryInto};
 use num_enum::{TryFromPrimitive, IntoPrimitive};
-use crate::{swd, hal::{gpio::Pins, spi::SPIClock, uart::UART}};
+use crate::{swd, jtag, hal::{gpio::Pins, spi::SPIClock, uart::UART}};
 
 #[derive(Copy, Clone, TryFromPrimitive)]
 #[allow(non_camel_case_types)]
@@ -93,8 +93,6 @@ enum ConnectPort {
 enum ConnectPortResponse {
     Failed  = 0,
     SWD     = 1,
-
-    #[allow(unused)]
     JTAG    = 2,
 }
 
@@ -216,27 +214,39 @@ impl <'a> ResponseWriter<'a> {
         self.buf[idx]
     }
 
+    pub fn skip(&mut self, n: usize) {
+        self.idx += n;
+    }
+
     pub fn finished(self) -> &'a [u8] {
         &self.buf[..self.idx]
     }
 }
 
+enum DAPMode {
+    SWD,
+    JTAG,
+}
+
 pub struct DAP<'a> {
     swd: swd::SWD<'a>,
+    jtag: &'a jtag::JTAG<'a>,
     uart: &'a mut UART<'a>,
     pins: &'a Pins<'a>,
     rbuf: [u8; 64],
-    configured: bool,
+    mode: Option<DAPMode>,
     swo_streaming: bool,
     match_retries: usize,
 }
 
 impl <'a> DAP<'a> {
-    pub fn new(swd: swd::SWD<'a>, uart: &'a mut UART<'a>, pins: &'a Pins) -> Self
+    pub fn new(swd: swd::SWD<'a>, jtag: &'a jtag::JTAG<'a>,
+               uart: &'a mut UART<'a>, pins: &'a Pins)
+    -> Self
     {
         DAP {
-            swd, uart, pins, rbuf: [0u8; 64],
-            configured: false, swo_streaming: false,
+            swd, jtag, uart, pins, rbuf: [0u8; 64],
+            mode: None, swo_streaming: false,
             match_retries: 5,
         }
     }
@@ -265,6 +275,7 @@ impl <'a> DAP<'a> {
             Command::DAP_SWO_Status => self.process_swo_status(req),
             Command::DAP_SWO_ExtendedStatus => self.process_swo_extended_status(req),
             Command::DAP_SWO_Data => self.process_swo_data(req),
+            Command::DAP_JTAG_Sequence => self.process_jtag_sequence(req),
             Command::DAP_TransferConfigure => self.process_transfer_configure(req),
             Command::DAP_Transfer => self.process_transfer(req),
             Command::DAP_TransferBlock => self.process_transfer_block(req),
@@ -354,8 +365,13 @@ impl <'a> DAP<'a> {
             Ok(ConnectPort::Default) | Ok(ConnectPort::SWD) => {
                 self.pins.swd_mode();
                 self.swd.spi_enable();
-                self.configured = true;
+                self.mode = Some(DAPMode::SWD);
                 resp.write_u8(ConnectPortResponse::SWD as u8);
+            },
+            Ok(ConnectPort::JTAG) => {
+                self.pins.jtag_mode();
+                self.mode = Some(DAPMode::JTAG);
+                resp.write_u8(ConnectPortResponse::JTAG as u8);
             },
             _ => {
                 resp.write_u8(ConnectPortResponse::Failed as u8);
@@ -367,7 +383,7 @@ impl <'a> DAP<'a> {
     fn process_disconnect(&mut self, req: Request) -> Option<ResponseWriter> {
         let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
         self.pins.high_impedance_mode();
-        self.configured = false;
+        self.mode = None;
         self.swd.spi_disable();
         resp.write_ok();
         Some(resp)
@@ -375,7 +391,7 @@ impl <'a> DAP<'a> {
 
     fn process_write_abort(&mut self, mut req: Request) -> Option<ResponseWriter> {
         let mut resp = ResponseWriter::new(req.command, &mut self.rbuf);
-        if !self.configured {
+        if self.mode.is_none() {
             resp.write_err();
             return Some(resp);
         }
@@ -629,6 +645,22 @@ impl <'a> DAP<'a> {
                 resp.write_slice(data);
             },
         }
+        Some(resp)
+    }
+
+    fn process_jtag_sequence(&mut self, req: Request) -> Option<ResponseWriter> {
+        // Extract command for later use
+        let command = req.command;
+
+        // Run requested JTAG sequences. Cannot fail.
+        // Returned data is written into rbuf before it's turned into a Response.
+        let size = self.jtag.sequences(req.rest(), &mut self.rbuf[2..]);
+
+        // Create a response wrapping the new data.
+        let mut resp = ResponseWriter::new(command, &mut self.rbuf);
+        resp.write_ok();
+        resp.skip(size);
+
         Some(resp)
     }
 
