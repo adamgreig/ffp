@@ -315,13 +315,13 @@ impl <'a> DAP<'a> {
             Ok(DAPInfoID::Capabilities) => {
                 resp.write_u8(1);
                 // Bit 0: SWD supported
-                // Bit 1: JTAG not supported
+                // Bit 1: JTAG supported
                 // Bit 2: SWO UART supported
                 // Bit 3: SWO Manchester not supported
                 // Bit 4: Atomic commands not supported
                 // Bit 5: Test Domain Timer not supported
                 // Bit 6: SWO Streaming Trace supported
-                resp.write_u8(0b0100_0101);
+                resp.write_u8(0b0100_0111);
             },
             Ok(DAPInfoID::SWOTraceBufferSize) => {
                 resp.write_u8(4);
