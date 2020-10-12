@@ -12,6 +12,7 @@ pub static STRING_PRD: &str = "FFP r1 with CMSIS-DAP Support";
 pub static STRING_IF_SPI: &str = "FFP SPI Interface";
 pub static STRING_IF_DAP1: &str = "FFP CMSIS-DAP v1 Interface";
 pub static STRING_IF_DAP2: &str = "FFP CMSIS-DAP v2 Interface";
+pub static STRING_IF_DFU: &str = "FFP DFU Interface";
 pub static STRING_MOS: &str = "MSFT100A";
 
 // Assigned by http://pid.codes/1209/FF50/
@@ -46,8 +47,11 @@ pub static CONFIGURATION_DESCRIPTOR: ConfigurationDescriptor = ConfigurationDesc
                    DAP1_HID_DESCRIPTOR.bLength as usize +
                    size_of::<[EndpointDescriptor; DAP1_NUM_ENDPOINTS]>() +
                    DAP2_INTERFACE_DESCRIPTOR.bLength as usize +
-                   size_of::<[EndpointDescriptor; DAP2_NUM_ENDPOINTS]>()) as u16,
-    bNumInterfaces: 3,
+                   size_of::<[EndpointDescriptor; DAP2_NUM_ENDPOINTS]>() +
+                   DFU_INTERFACE_DESCRIPTOR.bLength as usize +
+                   DFU_FUNCTIONAL_DESCRIPTOR.bLength as usize
+                   ) as u16,
+    bNumInterfaces: 4,
     bConfigurationValue: 1,
     iConfiguration: 0,
     bmAttributes: 0b1000_0000,
@@ -201,6 +205,27 @@ pub static DAP2_ENDPOINT_DESCRIPTORS: [EndpointDescriptor; DAP2_NUM_ENDPOINTS] =
         bInterval: 10,
     },
 ];
+
+pub static DFU_INTERFACE_DESCRIPTOR: InterfaceDescriptor = InterfaceDescriptor {
+    bLength: size_of::<InterfaceDescriptor>() as u8,
+    bDescriptorType: DescriptorType::Interface as u8,
+    bInterfaceNumber: 3,
+    bAlternateSetting: 0,
+    bNumEndpoints: 0,
+    bInterfaceClass: 0xFE,
+    bInterfaceSubClass: 1,
+    bInterfaceProtocol: 1,
+    iInterface: 7,
+};
+
+pub static DFU_FUNCTIONAL_DESCRIPTOR: DFUDescriptor = DFUDescriptor {
+    bLength: size_of::<DFUDescriptor>() as u8,
+    bDescriptorType: 0x21,
+    bmAttributes: 0x0F,
+    wDetachTimeOut: 250,
+    wTransferSize: 64,
+    bcdDFUVersion: 0x0100,
+};
 
 const MS_COMPATIBLE_ID_WINUSB: [u8; 8] = [b'W', b'I', b'N', b'U', b'S', b'B', 0, 0];
 

@@ -103,6 +103,9 @@ impl ControlEndpoint {
                 },
             },
 
+            // Process class-specific requests
+            SetupType::Class => self.process_class_request(usb, &setup),
+
             // Process vendor-specific requests
             SetupType::Vendor => self.process_vendor_request(usb, &setup),
 
@@ -244,6 +247,18 @@ impl ControlEndpoint {
             n += len;
         }
 
+        // Copy DFU_INTERFACE_DESCRIPTOR into buf
+        let len = DFU_INTERFACE_DESCRIPTOR.bLength as usize;
+        let data = DFU_INTERFACE_DESCRIPTOR.to_bytes();
+        buf[n..n+len].copy_from_slice(data);
+        n += len;
+
+        // Copy DFU_FUNCTIONAL_DESCRIPTOR into buf
+        let len = DFU_FUNCTIONAL_DESCRIPTOR.bLength as usize;
+        let data = DFU_FUNCTIONAL_DESCRIPTOR.to_bytes();
+        buf[n..n+len].copy_from_slice(data);
+        n += len;
+
         // Only send as much data as was requested
         let n = usize::min(n, w_length as usize);
 
@@ -275,7 +290,7 @@ impl ControlEndpoint {
             },
 
             // Handle manufacturer, product, serial number, interface, and MOS string
-            1..=6 | 0xEE => {
+            1..=7 | 0xEE => {
                 let id;
                 let string = match idx {
                     1 => Ok(STRING_MFN),
@@ -284,6 +299,7 @@ impl ControlEndpoint {
                     4 => Ok(STRING_IF_SPI),
                     5 => Ok(STRING_IF_DAP1),
                     6 => Ok(STRING_IF_DAP2),
+                    7 => Ok(STRING_IF_DFU),
                     0xEE => Ok(STRING_MOS),
                     _ => unreachable!(),
                 };
@@ -332,6 +348,50 @@ impl ControlEndpoint {
 
         let n = usize::min(report.len(), w_length as usize);
         self.transmit_slice(usb, &report[..n]);
+    }
+
+    /// Handle a class-specific request
+    fn process_class_request(
+        &mut self, usb: &usb::Instance, setup: &SetupPID)
+        -> Option<USBStackRequest>
+    {
+        let interface = setup.wIndex as u8;
+        match interface {
+            // DFU class specific request
+            x if x == DFU_INTERFACE_DESCRIPTOR.bInterfaceNumber =>
+                self.process_dfu_request(usb, &setup),
+
+            _ => {
+                self.stall(usb);
+                None
+            },
+        }
+    }
+
+    /// Handle a DFU request
+    fn process_dfu_request(
+        &mut self, usb: &usb::Instance, setup: &SetupPID)
+        -> Option<USBStackRequest>
+    {
+        match DFURequest::try_from(setup.bRequest) {
+            Ok(DFURequest::GetStatus) => {
+                let response = [0u8; 6];
+                self.transmit_slice(usb, &response[..]);
+                None
+            },
+
+            Ok(DFURequest::Detach) => {
+                self.pending_request = Some(
+                    USBStackRequest::AppRequestAndDetach(Request::Bootload));
+                self.transmit_ack(usb);
+                None
+            },
+
+            _ => {
+                self.stall(usb);
+                None
+            },
+        }
     }
 
     /// Handle a vendor-specific request

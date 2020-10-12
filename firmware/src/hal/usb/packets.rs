@@ -48,6 +48,18 @@ pub enum VendorRequest {
 
 #[derive(TryFromPrimitive)]
 #[repr(u8)]
+pub enum DFURequest {
+    Detach = 0,
+    Download = 1,
+    Upload = 2,
+    GetStatus = 3,
+    ClearStatus = 4,
+    GetState = 5,
+    Abort = 6,
+}
+
+#[derive(TryFromPrimitive)]
+#[repr(u8)]
 pub enum DescriptorType {
     Device = 1,
     Configuration = 2,
@@ -139,6 +151,18 @@ pub struct HIDDescriptor {
     pub bNumDescriptors: u8,
     pub bSubDescriptorType: u8,
     pub wSubDescriptorLength: u16,
+}
+
+#[allow(non_snake_case)]
+#[repr(C)]
+#[repr(packed)]
+pub struct DFUDescriptor {
+    pub bLength: u8,
+    pub bDescriptorType: u8,
+    pub bmAttributes: u8,
+    pub wDetachTimeOut: u16,
+    pub wTransferSize: u16,
+    pub bcdDFUVersion: u16,
 }
 
 #[allow(non_snake_case)]
@@ -278,6 +302,7 @@ unsafe impl ToBytes for InterfaceDescriptor {}
 unsafe impl ToBytes for EndpointDescriptor {}
 unsafe impl ToBytes for StringDescriptor {}
 unsafe impl ToBytes for HIDDescriptor {}
+unsafe impl ToBytes for DFUDescriptor {}
 unsafe impl ToBytes for MSCompatibleIDDescriptor {}
 
 impl MSPropertiesOSDescriptor {
