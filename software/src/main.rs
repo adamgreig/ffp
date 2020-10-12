@@ -282,8 +282,8 @@ fn main() -> ffp::Result<()> {
             let matches = matches.subcommand_matches("ecp5").unwrap();
             let idx = value_t!(matches.value_of("scan-index"), usize).unwrap();
             let ecp5 = ECP5::new(&programmer, idx)?;
-            let idcode = ecp5.id()?;
-            if !quiet { println!("Found {}", idcode.name()) }
+            //let idcode = ecp5.id()?;
+            //if !quiet { println!("Found {}", idcode.name()) }
             match matches.subcommand_name() {
                 Some("scan") => {
                     let (idcode, idx) = ECP5::scan(&programmer)?;
