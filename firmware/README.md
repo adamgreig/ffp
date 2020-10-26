@@ -59,6 +59,8 @@ cp target/thumbv6m-none-eabi/release/ffp_firmware ffp_firmware.elf
 To put an already-programmed FFP device into bootload mode:
 ```
 ffp bootload
+# or (if you do not have the ffp softare installed)
+dfu-util -e
 ```
 Devices which have a totally erased flash will come up in bootloader mode
 automatically.
