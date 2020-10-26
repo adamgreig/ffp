@@ -42,7 +42,7 @@ impl<'a> JTAG<'a> {
     ///
     /// Captured TDO data is written least significant bit first to successive
     /// bytes of `rxbuf`, which must be long enough for the requested capture,
-    /// or conservatively as long as `data`, and must be initialised to all-0.
+    /// or conservatively as long as `data`.
     /// The final byte of TDO data for each sequence is padded, in other words,
     /// as many TDO bytes will be returned as there were TDI bytes in sequences
     /// with capture enabled.
@@ -73,34 +73,19 @@ impl<'a> JTAG<'a> {
             let tdi = &data[..nbytes];
             data = &data[nbytes..];
 
-            // Run JTAG transfer, optionally capturing TDO.
+            // Set TMS for this transfer.
+            self.pins.tms.set_bool(tms != 0);
+
+            // Run one transfer, either read-write or write-only.
             if capture != 0 {
-                self.transfer(nbits, tms, tdi, Some(&mut rxbuf[rxidx..]));
+                self.transfer_rw(nbits, tdi, &mut rxbuf[rxidx..]);
                 rxidx += nbytes;
             } else {
-                self.transfer(nbits, tms, tdi, None);
+                self.transfer_wo(nbits, tdi);
             }
         }
 
         rxidx
-    }
-
-    /// Perform one JTAG transfer.
-    ///
-    /// Sets TMS to low if `tms` is 0, or high otherwise.
-    /// Transmits `n` bits out of successive bytes of `tdi`, LSbit first.
-    /// If `tdo` is `Some(&mut [u8])`, writes `n` bits into `tdo`, LSbit first.
-    /// Otherwise if `tdo` is `None`, does not save received data.
-    pub fn transfer(&self, n: usize, tms: u8, tdi: &[u8], tdo: Option<&mut [u8]>)
-    {
-        // Set TMS pin state.
-        self.pins.tms.set_bool(tms != 0);
-
-        // Perform either a read-write or a write-only transfer.
-        match tdo {
-            Some(tdo) => self.transfer_rw(n, tdi, tdo),
-            None      => self.transfer_wo(n, tdi),
-        }
     }
 
     /// Write-only JTAG transfer without capturing TDO.
@@ -166,6 +151,7 @@ impl<'a> JTAG<'a> {
         }
 
         for (byte_idx, (tdi, tdo)) in tdi.iter().zip(tdo.iter_mut()).enumerate() {
+            *tdo = 0;
             for bit_idx in 0..8 {
                 // Stop after transmitting `n` bits.
                 if byte_idx*8 + bit_idx == n {
@@ -194,6 +180,7 @@ impl<'a> JTAG<'a> {
         let tck_pin = 1 << self.pins.tck.pin_n();
 
         for (byte_idx, (tdi, tdo)) in tdi.iter().zip(tdo.iter_mut()).enumerate() {
+            *tdo = 0;
             for bit_idx in 0..8 {
                 // Stop after transmitting `n` bits.
                 if byte_idx*8 + bit_idx == n {
