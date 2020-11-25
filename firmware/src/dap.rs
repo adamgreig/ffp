@@ -465,7 +465,7 @@ impl <'a> DAP<'a> {
                 self.pins.flash_so.set_otype_opendrain().set_low().set_mode_output();
             } else {
                 // Set pin back to high-z when not being asserted.
-                self.pins.flash_so.set_mode_input();
+                self.pins.flash_so.set_mode_input().set_high();
             }
         }
 
