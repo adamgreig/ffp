@@ -12,4 +12,4 @@ SECTIONS
         *(.usbram .usbram.*);
         . = ALIGN(4);
     } > USBRAM
-} INSERT AFTER .bss;
+}
