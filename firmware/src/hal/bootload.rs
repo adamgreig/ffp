@@ -25,14 +25,8 @@ pub fn check() {
         // Remap system memory to 0x0000_0000
         write_reg!(syscfg, SYSCFG, CFGR1, MEM_MODE: SystemFlash);
 
-        // Get new stack pointer and jump address
-        let sp = core::ptr::read_volatile(0 as *const u32);
-        let rv = core::ptr::read_volatile(4 as *const u32);
-        let bootloader: extern "C" fn() = core::mem::transmute(rv);
-
-        // Write new stack pointer to MSP and call into system memory
-        cortex_m::register::msp::write(sp);
-        bootloader();
+        // Jump using bootloader's vector table at address 0.
+        cortex_m::asm::bootload(0 as *const u32);
     }
 }
 
